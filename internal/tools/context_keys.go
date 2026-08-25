@@ -28,6 +28,7 @@ const (
 	ctxChatID                     toolContextKey = "tool_chat_id"
 	ctxPeerKind                   toolContextKey = "tool_peer_kind"
 	ctxLocalKey                   toolContextKey = "tool_local_key" // composite key with topic/thread suffix for routing
+	ctxThreadID                   toolContextKey = "tool_thread_id" // reply thread/topic the run answers in
 	ctxSandboxKey                 toolContextKey = "tool_sandbox_key"
 	ctxAsyncCB                    toolContextKey = "tool_async_cb"
 	ctxWorkspace                  toolContextKey = "tool_workspace"
@@ -188,6 +189,50 @@ func WithToolLocalKey(ctx context.Context, localKey string) context.Context {
 func ToolLocalKeyFromCtx(ctx context.Context) string {
 	v, _ := ctx.Value(ctxLocalKey).(string)
 	return v
+}
+
+// WithToolThreadID injects the thread/topic the run is replying in.
+//
+// It is NOT derivable from the local key: a channel message that arrives at top
+// level produces a thread-less local key while the reply opens a new thread on
+// that message, so only this value knows where the answer is going.
+func WithToolThreadID(ctx context.Context, threadID string) context.Context {
+	return context.WithValue(ctx, ctxThreadID, threadID)
+}
+
+func ToolThreadIDFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxThreadID).(string)
+	return v
+}
+
+// AddSameChatRoutingMeta adds the run's thread/topic routing to outbound
+// metadata so a message sent back into the current conversation lands where the
+// reply is going, instead of at the chat root.
+//
+// Both keys matter. The local key alone is not enough: a channel message that
+// arrives at top level produces a thread-less local key while the reply opens a
+// new thread on it, and only the thread ID knows about that thread. The thread
+// ID alone is not enough either — it is absent on transports that only carry
+// the local key (the MCP bridge headers).
+//
+// Callers must only use this for sends that stay in the run's own conversation;
+// the routing describes that conversation and nothing else.
+func AddSameChatRoutingMeta(ctx context.Context, meta map[string]string) map[string]string {
+	localKey := ToolLocalKeyFromCtx(ctx)
+	threadID := ToolThreadIDFromCtx(ctx)
+	if localKey == "" && threadID == "" {
+		return meta
+	}
+	if meta == nil {
+		meta = make(map[string]string, 2)
+	}
+	if localKey != "" {
+		meta["local_key"] = localKey
+	}
+	if threadID != "" {
+		meta["message_thread_id"] = threadID
+	}
+	return meta
 }
 
 func WithToolSandboxKey(ctx context.Context, key string) context.Context {

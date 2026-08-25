@@ -640,6 +640,7 @@ type RunRequest struct {
 	ToolAllow                  []string           // per-group tool allow list (nil = no restriction, supports "group:xxx")
 	TelegramManagerPermissions []string           // hidden Telegram management permission groups granted by the channel config
 	LocalKey                   string             // composite key with topic/thread suffix for routing (e.g. "-100123:topic:42")
+	ThreadID                   string             // thread/topic the reply goes into; not derivable from LocalKey when the reply opens the thread
 	ParentTraceID              uuid.UUID          // if set, reuse parent trace instead of creating new (announce runs)
 	ParentRootSpanID           uuid.UUID          // if set, nest announce agent span under this parent span
 	LinkedTraceID              uuid.UUID          // if set, create new trace with parent_trace_id pointing to this (team task runs)

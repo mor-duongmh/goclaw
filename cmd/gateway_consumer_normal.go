@@ -499,6 +499,7 @@ func processNormalMessage(
 		WorkspaceChatID:            msg.ChatID,
 		PeerKind:                   peerKind,
 		LocalKey:                   msg.Metadata["local_key"],
+		ThreadID:                   msg.Metadata["message_thread_id"],
 		UserID:                     userID,
 		SenderID:                   effectiveSenderID,
 		Role:                       effectiveRole,

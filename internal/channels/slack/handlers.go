@@ -206,23 +206,12 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		"sender_id", senderID, "channel_id", channelID,
 		"is_dm", isDM, "preview", channels.Truncate(content, 50))
 
-	// Send "Thinking..." placeholder
 	replyThreadTS := threadTS
 	if !isDM && replyThreadTS == "" {
 		replyThreadTS = ev.TimeStamp // start thread from the triggering message
 	}
 
-	placeholderOpts := []slackapi.MsgOption{
-		slackapi.MsgOptionText("Thinking...", false),
-	}
-	if replyThreadTS != "" {
-		placeholderOpts = append(placeholderOpts, slackapi.MsgOptionTS(replyThreadTS))
-	}
-
-	_, placeholderTS, err := c.api.PostMessage(channelID, placeholderOpts...)
-	if err == nil {
-		c.placeholders.Store(localKey, placeholderTS)
-	}
+	c.postPlaceholder(channelID, localKey, replyThreadTS)
 
 	// Build final content with group history context
 	finalContent := content

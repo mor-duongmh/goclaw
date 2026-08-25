@@ -286,6 +286,12 @@ func (t *MessageTool) buildOutboundMetadata(ctx context.Context, target, forward
 	if isGroupContext(ctx) {
 		meta = map[string]string{"group_id": target}
 	}
+	// Same-chat sends inherit the run's thread routing so the channel can put the
+	// message back where the answer is going. Cross-target sends must not: this
+	// routing belongs to a different conversation.
+	if target == ToolChatIDFromCtx(ctx) {
+		meta = AddSameChatRoutingMeta(ctx, meta)
+	}
 	if forwardReason == "" {
 		return meta
 	}
@@ -480,11 +486,14 @@ func (t *MessageTool) sendMedia(ctx context.Context, channel, target, filePath s
 		return ErrorResult("media sending requires message bus")
 	}
 
-	// Build metadata for group routing (Zalo needs group_id to choose group API).
-	var meta map[string]string
-	if isGroupContext(ctx) {
-		meta = map[string]string{"group_id": target}
-	}
+	meta := t.buildOutboundMetadata(ctx, target, "")
+	slog.Info("message_tool.media_send",
+		"channel", channel,
+		"target", target,
+		"ctx_chat", ToolChatIDFromCtx(ctx),
+		"ctx_local_key", ToolLocalKeyFromCtx(ctx),
+		"ctx_thread", ToolThreadIDFromCtx(ctx),
+		"meta", meta)
 
 	t.msgBus.PublishOutbound(bus.OutboundMessage{
 		Channel:  channel,

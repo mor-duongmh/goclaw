@@ -16,7 +16,6 @@ var mediaDocNameRe = regexp.MustCompile(`<media:document\b[^>]*\bname="([^"]+)"[
 // mediaDocPathNameRe matches path-before-name ordering and Slack file= variant.
 var mediaDocPathNameRe = regexp.MustCompile(`<media:document\b[^>]*\bpath="([^"]+)"[^>]*\b(?:name|file)="([^"]+)"`)
 
-
 // ExtractMediaNameMap parses message content for <media:document name="X" path="Y"> tags
 // and returns a map from absolute file path to original filename.
 func ExtractMediaNameMap(content string) map[string]string {

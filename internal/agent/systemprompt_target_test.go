@@ -114,7 +114,7 @@ func TestSystemPromptBitrix24EntityLinkSection_SkippedForOtherChannel(t *testing
 }
 
 // Empty domain → section skipped, even on bitrix24 channel (legacy install
-// without a portal row should not produce a useless "Portal domain: ``").
+// without a portal row should not produce a useless "Portal domain: “").
 func TestSystemPromptBitrix24EntityLinkSection_SkippedWhenDomainEmpty(t *testing.T) {
 	cfg := fullTestConfig()
 	cfg.Channel = "bitrix-sales"

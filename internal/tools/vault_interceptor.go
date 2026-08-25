@@ -253,4 +253,3 @@ func (v *VaultInterceptor) BeforeRead(ctx context.Context, resolvedPath string) 
 		}
 	}
 }
-
