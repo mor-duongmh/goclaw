@@ -80,9 +80,9 @@ func (n *nopSessionStore) SetHistory(_ context.Context, _ string, msgs []provide
 	defer n.mu.Unlock()
 	n.history = msgs
 }
-func (n *nopSessionStore) Reset(_ context.Context, _ string)                               {}
-func (n *nopSessionStore) Delete(_ context.Context, _ string) error                        { return nil }
-func (n *nopSessionStore) Save(_ context.Context, _ string) error                          { return nil }
+func (n *nopSessionStore) Reset(_ context.Context, _ string)        {}
+func (n *nopSessionStore) Delete(_ context.Context, _ string) error { return nil }
+func (n *nopSessionStore) Save(_ context.Context, _ string) error   { return nil }
 
 // SessionMetadataStore methods
 func (n *nopSessionStore) UpdateMetadata(_ context.Context, _, _, _, _ string) {}

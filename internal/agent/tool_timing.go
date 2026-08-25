@@ -21,10 +21,10 @@ const minTimingSamples = 3
 
 // ToolTimingStat tracks execution time statistics for a single tool.
 type ToolTimingStat struct {
-	Min   int64 `json:"min"`   // minimum duration in ms
-	Max   int64 `json:"max"`   // maximum duration in ms
-	Sum   int64 `json:"sum"`   // total duration in ms (for avg calculation)
-	Count int   `json:"n"`     // number of samples
+	Min   int64 `json:"min"` // minimum duration in ms
+	Max   int64 `json:"max"` // maximum duration in ms
+	Sum   int64 `json:"sum"` // total duration in ms (for avg calculation)
+	Count int   `json:"n"`   // number of samples
 }
 
 // ToolTimingMap maps tool names to their timing statistics.
@@ -120,4 +120,3 @@ func (m ToolTimingMap) StartSlowTimer(toolName, agentID, runID string, enabled b
 	})
 	return func() { timer.Stop() }
 }
-

@@ -231,4 +231,3 @@ func (t *CreateVideoTool) callProvider(ctx context.Context, cp credentialProvide
 		return t.callChatVideoGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, duration, aspectRatio, params)
 	}
 }
-

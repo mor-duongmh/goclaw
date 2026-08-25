@@ -13,8 +13,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-const listPageSize    = 30
-const searchPageSize  = 5
+const listPageSize = 30
+const searchPageSize = 5
 
 // blockerSummary is a compact view of a blocker task for blocked_by resolution.
 type blockerSummary struct {

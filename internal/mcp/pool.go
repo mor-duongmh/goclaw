@@ -51,9 +51,9 @@ type poolEntry struct {
 // Per-user connections are keyed by tenantID/serverName/user:userID.
 type Pool struct {
 	mu          sync.Mutex
-	servers     map[string]*poolEntry            // shared connections: tenantID/serverName
-	userServers map[string]*poolEntry            // user connections: tenantID/serverName/user:userID
-	userSlots   map[string]chan struct{}          // per-server semaphores: tenantID/serverName → capacity MaxUserConns
+	servers     map[string]*poolEntry    // shared connections: tenantID/serverName
+	userServers map[string]*poolEntry    // user connections: tenantID/serverName/user:userID
+	userSlots   map[string]chan struct{} // per-server semaphores: tenantID/serverName → capacity MaxUserConns
 	cfg         PoolConfig
 	slot        chan struct{} // semaphore for MaxSize
 	stopCh      chan struct{}

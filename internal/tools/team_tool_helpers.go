@@ -91,7 +91,6 @@ func (m *TeamToolManager) FollowupMaxReminders(team *store.TeamData) int {
 // Version helpers
 // ============================================================
 
-
 // ============================================================
 // Follow-up settings helpers
 // ============================================================

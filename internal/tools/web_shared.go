@@ -137,15 +137,15 @@ func isPrivateIP(ipStr string) bool {
 		network string
 		mask    int
 	}{
-		{"0.0.0.0", 8},       // current network
-		{"10.0.0.0", 8},      // private
-		{"127.0.0.0", 8},     // loopback
-		{"169.254.0.0", 16},  // link-local
-		{"172.16.0.0", 12},   // private
-		{"192.168.0.0", 16},  // private
-		{"100.64.0.0", 10},   // carrier-grade NAT (RFC 6598)
-		{"198.18.0.0", 15},   // benchmarking (RFC 2544)
-		{"240.0.0.0", 4},     // reserved for future use
+		{"0.0.0.0", 8},      // current network
+		{"10.0.0.0", 8},     // private
+		{"127.0.0.0", 8},    // loopback
+		{"169.254.0.0", 16}, // link-local
+		{"172.16.0.0", 12},  // private
+		{"192.168.0.0", 16}, // private
+		{"100.64.0.0", 10},  // carrier-grade NAT (RFC 6598)
+		{"198.18.0.0", 15},  // benchmarking (RFC 2544)
+		{"240.0.0.0", 4},    // reserved for future use
 	}
 
 	for _, r := range privateRanges {
@@ -157,11 +157,11 @@ func isPrivateIP(ipStr string) bool {
 
 	// IPv6 private ranges
 	ipv6Ranges := []string{
-		"::0/128",    // unspecified
-		"::1/128",    // loopback
-		"fe80::/10",  // link-local
-		"fec0::/10",  // site-local (deprecated)
-		"fc00::/7",   // unique local
+		"::0/128",   // unspecified
+		"::1/128",   // loopback
+		"fe80::/10", // link-local
+		"fec0::/10", // site-local (deprecated)
+		"fc00::/7",  // unique local
 	}
 	for _, cidrStr := range ipv6Ranges {
 		_, cidr, _ := net.ParseCIDR(cidrStr)

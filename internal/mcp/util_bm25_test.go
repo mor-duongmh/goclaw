@@ -388,7 +388,7 @@ func TestTokenizeMCP_BasicTokenization(t *testing.T) {
 		expect []string
 	}{
 		{"search web", []string{"search", "web"}},
-		{"Search Web", []string{"search", "web"}},         // lowercased
+		{"Search Web", []string{"search", "web"}},          // lowercased
 		{"query_db tool", []string{"query", "db", "tool"}}, // underscore as separator
 		{"", nil},
 		{"a b c", nil}, // single-char tokens filtered
@@ -517,4 +517,3 @@ func makeBridgeToolWithDesc(serverName, toolName, description string) *BridgeToo
 		requiredSet:    map[string]bool{},
 	}
 }
-

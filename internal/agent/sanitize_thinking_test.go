@@ -4,9 +4,9 @@ import "testing"
 
 func TestStripThinkingTags_RedactedThinking(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		want    string
+		name  string
+		input string
+		want  string
 	}{
 		{
 			name:  "strips redacted_thinking tags",

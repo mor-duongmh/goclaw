@@ -119,7 +119,7 @@ func runOnboard() {
 		cfg.Gateway.Port = 18790
 	}
 	cfg.Database.PostgresDSN = "" // secrets go in .env.local, not config
-	cfg.Gateway.Token = ""       // secrets go in .env.local, not config
+	cfg.Gateway.Token = ""        // secrets go in .env.local, not config
 
 	if err := config.Save(cfgPath, cfg); err != nil {
 		fmt.Printf("  Error saving config: %v\n", err)

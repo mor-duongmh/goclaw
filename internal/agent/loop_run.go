@@ -123,6 +123,9 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	if req.LocalKey != "" {
 		ctx = tools.WithToolLocalKey(ctx, req.LocalKey)
 	}
+	if req.ThreadID != "" {
+		ctx = tools.WithToolThreadID(ctx, req.ThreadID)
+	}
 
 	runStart := time.Now().UTC()
 

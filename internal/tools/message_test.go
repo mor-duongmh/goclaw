@@ -1087,3 +1087,87 @@ func TestMessageToolTopicSendReturnsMessageID(t *testing.T) {
 		t.Errorf("result must include the sent message_id, got: %s", r.ForLLM)
 	}
 }
+
+// A file sent back into the current chat must carry the run's composite local
+// key, so threaded channels (Slack threads, Telegram topics) can route the
+// attachment into the conversation it was asked for instead of the chat root.
+func TestSendMediaCarriesLocalKeyForCurrentChat(t *testing.T) {
+	workspace := t.TempDir()
+	mediaPath := filepath.Join(workspace, "report.txt")
+	if err := os.WriteFile(mediaPath, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := NewMessageTool(workspace, false)
+	mb := bus.New()
+	tool.SetMessageBus(mb)
+
+	ctx := context.Background()
+	ctx = WithToolSessionKey(ctx, "agent:a:slack:direct:D1")
+	ctx = WithToolChannel(ctx, "slack")
+	ctx = WithToolChatID(ctx, "D1")
+	ctx = WithToolPeerKind(ctx, "direct")
+	ctx = WithToolLocalKey(ctx, "D1:thread:1700000000.000100")
+
+	res := tool.Execute(ctx, map[string]any{
+		"action":  "send",
+		"channel": "slack",
+		"target":  "D1",
+		"message": "MEDIA:" + mediaPath,
+	})
+	if res != nil && res.IsError {
+		t.Fatalf("unexpected error: %s", res.ForLLM)
+	}
+
+	got := drainBusNow(mb)
+	if len(got) != 1 {
+		t.Fatalf("outbound count: got %d want 1 (%+v)", len(got), got)
+	}
+	if len(got[0].Media) != 1 {
+		t.Fatalf("expected one attachment, got %+v", got[0].Media)
+	}
+	if got[0].Metadata["local_key"] != "D1:thread:1700000000.000100" {
+		t.Fatalf("local_key = %q, want the run's local key", got[0].Metadata["local_key"])
+	}
+}
+
+// The local key describes the current conversation only — a forwarded send to a
+// different chat must not inherit it.
+func TestSendMediaOmitsLocalKeyOnCrossTargetForward(t *testing.T) {
+	workspace := t.TempDir()
+	mediaPath := filepath.Join(workspace, "report.txt")
+	if err := os.WriteFile(mediaPath, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := NewMessageTool(workspace, false)
+	mb := bus.New()
+	tool.SetMessageBus(mb)
+
+	ctx := context.Background()
+	ctx = WithToolSessionKey(ctx, "agent:a:slack:direct:D1")
+	ctx = WithToolChannel(ctx, "slack")
+	ctx = WithToolChatID(ctx, "D1")
+	ctx = WithToolPeerKind(ctx, "direct")
+	ctx = WithToolLocalKey(ctx, "D1:thread:1700000000.000100")
+
+	res := tool.Execute(ctx, map[string]any{
+		"action":         "send",
+		"channel":        "slack",
+		"target":         "C2",
+		"message":        "MEDIA:" + mediaPath,
+		"forward":        true,
+		"forward_reason": "user asked to forward this file to C2",
+	})
+	if res != nil && res.IsError {
+		t.Fatalf("unexpected error: %s", res.ForLLM)
+	}
+
+	got := drainBusNow(mb)
+	if len(got) == 0 {
+		t.Fatal("expected an outbound message")
+	}
+	if lk := got[0].Metadata["local_key"]; lk != "" {
+		t.Fatalf("local_key = %q, want empty for a cross-target forward", lk)
+	}
+}

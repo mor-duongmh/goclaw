@@ -152,34 +152,34 @@ func (m *mockMCPServerStore) CacheToolDescriptions(_ context.Context, _ uuid.UUI
 // --- Test setup helpers ---
 
 var (
-	mcpCredTestAgentID = uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	mcpCredTestUserID  = "test-user-42"
+	mcpCredTestAgentID  = uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	mcpCredTestUserID   = "test-user-42"
 	mcpCredTestTenantID = uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 	mcpCredServerGitHub = &store.MCPServerData{
-		BaseModel:  store.BaseModel{ID: uuid.MustParse("33333333-3333-3333-3333-333333333333")},
-		Name:       "github",
+		BaseModel:   store.BaseModel{ID: uuid.MustParse("33333333-3333-3333-3333-333333333333")},
+		Name:        "github",
 		DisplayName: "GitHub API",
-		Transport:  "streamable-http",
-		URL:        "https://mcp.github.io",
-		Enabled:    true,
+		Transport:   "streamable-http",
+		URL:         "https://mcp.github.io",
+		Enabled:     true,
 	}
 	mcpCredServerPostgres = &store.MCPServerData{
-		BaseModel:  store.BaseModel{ID: uuid.MustParse("44444444-4444-4444-4444-444444444444")},
-		Name:       "postgres",
+		BaseModel:   store.BaseModel{ID: uuid.MustParse("44444444-4444-4444-4444-444444444444")},
+		Name:        "postgres",
 		DisplayName: "",
-		Transport:  "stdio",
-		Command:    "npx",
-		Args:       json.RawMessage(`["@mcp/postgres"]`),
-		Enabled:    true,
+		Transport:   "stdio",
+		Command:     "npx",
+		Args:        json.RawMessage(`["@mcp/postgres"]`),
+		Enabled:     true,
 	}
 	mcpCredServerSlack = &store.MCPServerData{
-		BaseModel:             store.BaseModel{ID: uuid.MustParse("55555555-5555-5555-5555-555555555555")},
-		Name:                  "slack",
-		DisplayName:           "Slack",
-		Transport:             "streamable-http",
-		URL:                   "https://mcp.slack.com",
-		Enabled:               true,
+		BaseModel:              store.BaseModel{ID: uuid.MustParse("55555555-5555-5555-5555-555555555555")},
+		Name:                   "slack",
+		DisplayName:            "Slack",
+		Transport:              "streamable-http",
+		URL:                    "https://mcp.slack.com",
+		Enabled:                true,
 		RequireUserCredentials: true,
 	}
 	mcpCredServerVault = &store.MCPServerData{
@@ -388,7 +388,7 @@ func TestMCPCredentialManager_CredentialStatus_WithCreds(t *testing.T) {
 	mock.addServer(mcpCredServerGitHub)
 	mock.accessible = []store.MCPAccessInfo{{Server: *mcpCredServerGitHub}}
 	mock.setCredentials(mcpCredServerGitHub.ID, mcpCredTestUserID, &store.MCPUserCredentials{
-		APIKey: "ghp_abcdef1234567890abcdef1234567890",
+		APIKey:  "ghp_abcdef1234567890abcdef1234567890",
 		Headers: map[string]string{"X-Custom": "value"},
 		Env:     map[string]string{"MY_VAR": "my_value"},
 	})
@@ -638,7 +638,7 @@ func TestMCPCredentialManager_SetBearerToken_OverwritesExisting(t *testing.T) {
 	mock.addServer(mcpCredServerSlack)
 	// Pre-set existing credentials
 	mock.setCredentials(mcpCredServerSlack.ID, mcpCredTestUserID, &store.MCPUserCredentials{
-		APIKey: "old-token",
+		APIKey:  "old-token",
 		Headers: map[string]string{"X-Old": "value"},
 	})
 

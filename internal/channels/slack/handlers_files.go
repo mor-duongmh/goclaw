@@ -218,6 +218,7 @@ func (c *Channel) uploadFile(channelID, threadTS string, media bus.MediaAttachme
 		FileSize:        len(data),
 		Reader:          bytes.NewReader(data),
 		Title:           fileName,
+		InitialComment:  media.Caption,
 		Channel:         channelID,
 		ThreadTimestamp: threadTS,
 	}

@@ -291,4 +291,3 @@ func TestPersistAssistantImages_PathInsideMediaDir(t *testing.T) {
 		}
 	}
 }
-

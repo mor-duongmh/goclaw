@@ -162,9 +162,9 @@ func TestHashHostScope(t *testing.T) {
 
 func TestSortedKeys_Deterministic(t *testing.T) {
 	in := map[string]string{
-		"GIT_SSH_COMMAND": "ssh -i /tmp/x",
+		"GIT_SSH_COMMAND":     "ssh -i /tmp/x",
 		"GIT_TERMINAL_PROMPT": "0",
-		"GIT_CONFIG_COUNT": "1",
+		"GIT_CONFIG_COUNT":    "1",
 	}
 	got := sortedKeys(in)
 	want := []string{"GIT_CONFIG_COUNT", "GIT_SSH_COMMAND", "GIT_TERMINAL_PROMPT"}

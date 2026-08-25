@@ -18,7 +18,7 @@ import (
 // skips WithSenderID and the Lead's resume has empty sender attribution.
 func TestAnnounceRouting_PropagatesSenderAndRole(t *testing.T) {
 	const (
-		realSender = "5218954741"   // Telegram numeric user id
+		realSender = "5218954741" // Telegram numeric user id
 		realRole   = "admin"
 		realUserID = "group:telegram:-1003812294018"
 	)

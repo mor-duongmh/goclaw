@@ -82,7 +82,7 @@ func (t *WebFetchTool) UpdatePolicy(policy string, allowed, blocked []string) {
 
 // webFetchPolicy holds the resolved domain policy for a single request.
 type webFetchPolicy struct {
-	mode           string   // "allow_all" | "allowlist"
+	mode           string // "allow_all" | "allowlist"
 	allowedDomains []string
 	blockedDomains []string
 }

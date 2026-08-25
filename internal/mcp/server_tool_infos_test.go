@@ -17,7 +17,7 @@ import (
 // TestSelfConnectedServer_CacheRetainsDescriptionAndSchema is a regression
 // test for a reported bug where connecting to an already-connected MCP
 // server as a client showed tools with an empty description and empty
-// parameters in the system-prompt preview (`- function: {description: '',
+// parameters in the system-prompt preview (`- function: {description: ”,
 // parameters: {type: object}}`), while newly-discovered tools came through
 // with full schema.
 //

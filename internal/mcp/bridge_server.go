@@ -248,14 +248,21 @@ func forwardMediaToOutbound(ctx context.Context, msgBus *bus.MessageBus, toolNam
 	if peerKind == "group" {
 		meta = map[string]string{"group_id": chatID}
 	}
+	// The file belongs to the turn being answered, so it has to follow the reply
+	// into its thread/topic. Without this the attachment lands at the chat root
+	// while the answer sits in a thread.
+	meta = tools.AddSameChatRoutingMeta(ctx, meta)
+
 	msgBus.PublishOutbound(bus.OutboundMessage{
 		Channel:  channel,
 		ChatID:   chatID,
 		Media:    attachments,
 		Metadata: meta,
 	})
-	slog.Debug("mcp.bridge: forwarded media to outbound bus",
-		"tool", toolName, "channel", channel, "files", len(attachments))
+	slog.Info("mcp.bridge.media_forward",
+		"tool", toolName, "channel", channel, "chat_id", chatID,
+		"local_key", meta["local_key"], "thread", meta["message_thread_id"],
+		"files", len(attachments))
 }
 
 // mimeFromExt returns a MIME type for a file extension.

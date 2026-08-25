@@ -76,8 +76,8 @@ Có gì anh hỏi thêm nhé!`,
 			agentType: "predefined",
 		},
 		{
-			name: "predefined - config names in fenced code block (architecture docs)",
-			content: "Đây là cấu trúc hệ thống:\n\n```\nagents/\n├── SOUL.md\n├── IDENTITY.md\n├── AGENTS.md\n├── BOOTSTRAP.md\n└── TOOLS.md\n```\n\nAnh cần gì thêm không?",
+			name:      "predefined - config names in fenced code block (architecture docs)",
+			content:   "Đây là cấu trúc hệ thống:\n\n```\nagents/\n├── SOUL.md\n├── IDENTITY.md\n├── AGENTS.md\n├── BOOTSTRAP.md\n└── TOOLS.md\n```\n\nAnh cần gì thêm không?",
 			agentType: "predefined",
 		},
 		{
@@ -86,15 +86,15 @@ Có gì anh hỏi thêm nhé!`,
 			agentType: "predefined",
 		},
 		{
-			name: "predefined - mixed: code block + plain text below threshold",
-			content: "Hệ thống dùng:\n\n```\nSOUL.md\nIDENTITY.md\nAGENTS.md\nBOOTSTRAP.md\n```\n\nEm đã update SOUL.md rồi.",
+			name:      "predefined - mixed: code block + plain text below threshold",
+			content:   "Hệ thống dùng:\n\n```\nSOUL.md\nIDENTITY.md\nAGENTS.md\nBOOTSTRAP.md\n```\n\nEm đã update SOUL.md rồi.",
 			agentType: "predefined",
 		},
 		{
-			name: "predefined - plain text leak still triggers",
-			content: "Em load SOUL.md, IDENTITY.md, AGENTS.md vào context.",
+			name:      "predefined - plain text leak still triggers",
+			content:   "Em load SOUL.md, IDENTITY.md, AGENTS.md vào context.",
 			agentType: "predefined",
-			want:  declineMsg,
+			want:      declineMsg,
 		},
 	}
 

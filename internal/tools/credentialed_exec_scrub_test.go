@@ -17,10 +17,10 @@ import (
 	"time"
 )
 
-// 1. Success path: adapter ScrubValues registered via bag are stripped from
-//    stdout in the final *Result.ForLLM. Uses a sentinel that does NOT match
-//    any built-in credentialPatterns regex (no `ghp_`, no `aws_`, no
-//    `://user:pass@`) so the bag is the only thing that could redact it.
+//  1. Success path: adapter ScrubValues registered via bag are stripped from
+//     stdout in the final *Result.ForLLM. Uses a sentinel that does NOT match
+//     any built-in credentialPatterns regex (no `ghp_`, no `aws_`, no
+//     `://user:pass@`) so the bag is the only thing that could redact it.
 func TestFormatCredentialedResult_HonorsScrubBag_Success(t *testing.T) {
 	ctx := WithScrubBag(context.Background())
 	secret := "glpat-NONSENSE_GITLAB_PAT_VALUE_XYZ123" // not matched by global regex
@@ -43,9 +43,9 @@ func TestFormatCredentialedResult_HonorsScrubBag_Success(t *testing.T) {
 	}
 }
 
-// 2. Failure path: same guarantee on the error branch (exit != 0). This is
-//    the more dangerous case in practice — error messages often quote the
-//    failing URL/header that contains the token.
+//  2. Failure path: same guarantee on the error branch (exit != 0). This is
+//     the more dangerous case in practice — error messages often quote the
+//     failing URL/header that contains the token.
 func TestFormatCredentialedResult_HonorsScrubBag_Failure(t *testing.T) {
 	ctx := WithScrubBag(context.Background())
 	keyPath := "/tmp/goclaw-gitkey-SENTINEL_PATH_VALUE_xyz789"
@@ -69,9 +69,9 @@ func TestFormatCredentialedResult_HonorsScrubBag_Failure(t *testing.T) {
 	}
 }
 
-// 3. Negative control: without a bag in ctx, the same secret leaks (proves
-//    the test is actually exercising the bag path, not getting silently
-//    scrubbed by a global match).
+//  3. Negative control: without a bag in ctx, the same secret leaks (proves
+//     the test is actually exercising the bag path, not getting silently
+//     scrubbed by a global match).
 func TestFormatCredentialedResult_NoBag_LeaksNonGlobalSecret(t *testing.T) {
 	ctx := context.Background() // no WithScrubBag
 	secret := "glpat-NONSENSE_GITLAB_PAT_VALUE_CONTROL"
@@ -86,8 +86,8 @@ func TestFormatCredentialedResult_NoBag_LeaksNonGlobalSecret(t *testing.T) {
 	}
 }
 
-// 4. Sanity: empty ctx + empty bag must not panic and must return the regex
-//    pass intact (well-known ghp_… still gets redacted).
+//  4. Sanity: empty ctx + empty bag must not panic and must return the regex
+//     pass intact (well-known ghp_… still gets redacted).
 func TestFormatCredentialedResult_EmptyBag_StillRunsGlobalRegex(t *testing.T) {
 	ctx := WithScrubBag(context.Background())
 	// classic GitHub PAT shape — matched by the package's regex pass
@@ -100,8 +100,8 @@ func TestFormatCredentialedResult_EmptyBag_StillRunsGlobalRegex(t *testing.T) {
 	}
 }
 
-// 5. Defensive: confirm the timeout path doesn't surface stderr at all
-//    (it returns the timeout marker, not the captured output), so no leak vector.
+//  5. Defensive: confirm the timeout path doesn't surface stderr at all
+//     (it returns the timeout marker, not the captured output), so no leak vector.
 func TestFormatCredentialedResult_TimeoutPath_NoStderrLeak(t *testing.T) {
 	ctx, cancel := context.WithTimeout(WithScrubBag(context.Background()), 1*time.Nanosecond)
 	defer cancel()
