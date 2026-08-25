@@ -239,9 +239,9 @@ func TestPruneContextMessages_SoftTrim_LongToolResult(t *testing.T) {
 	}
 
 	cfg := &config.ContextPruningConfig{
-		Mode:          "cache-ttl", // enable pruning
-		SoftTrimRatio: 0.01,        // threshold very low → prune immediately
-		HardClearRatio: 0.99,       // don't hard clear
+		Mode:           "cache-ttl", // enable pruning
+		SoftTrimRatio:  0.01,        // threshold very low → prune immediately
+		HardClearRatio: 0.99,        // don't hard clear
 		SoftTrim: &config.ContextPruningSoftTrim{
 			MaxChars:  100,
 			HeadChars: 50,

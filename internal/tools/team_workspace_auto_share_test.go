@@ -8,9 +8,9 @@ import (
 
 func TestExtractFilePaths(t *testing.T) {
 	tests := []struct {
-		name  string
-		text  string
-		want  []string
+		name string
+		text string
+		want []string
 	}{
 		{"quoted_double", `see "report.md" for details`, []string{"report.md"}},
 		{"quoted_single", `check 'docs/notes.txt' please`, []string{"docs/notes.txt"}},

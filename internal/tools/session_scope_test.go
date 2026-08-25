@@ -11,24 +11,24 @@ import (
 
 func TestExtractGroupChatID_ValidGroupZalo(t *testing.T) {
 	tests := []struct {
-		name     string
-		userID   string
-		wantID   string
+		name   string
+		userID string
+		wantID string
 	}{
 		{
-			name:     "group Zalo format",
-			userID:   "group:tuelinhzalo:7296946457790431889",
-			wantID:   "7296946457790431889",
+			name:   "group Zalo format",
+			userID: "group:tuelinhzalo:7296946457790431889",
+			wantID: "7296946457790431889",
 		},
 		{
-			name:     "group Telegram format",
-			userID:   "group:telegram:123456",
-			wantID:   "123456",
+			name:   "group Telegram format",
+			userID: "group:telegram:123456",
+			wantID: "123456",
 		},
 		{
-			name:     "group with numeric chatID",
-			userID:   "group:channel:999",
-			wantID:   "999",
+			name:   "group with numeric chatID",
+			userID: "group:channel:999",
+			wantID: "999",
 		},
 	}
 
@@ -89,24 +89,24 @@ func TestExtractGroupChatID_NonGroupUsers(t *testing.T) {
 
 func TestExtractGroupChatID_EdgeCases(t *testing.T) {
 	tests := []struct {
-		name     string
-		userID   string
-		wantID   string
+		name   string
+		userID string
+		wantID string
 	}{
 		{
-			name:     "chatID containing colon (edge case, unusual but possible)",
-			userID:   "group:channel:abc:def",
-			wantID:   "abc:def", // SplitN with n=3 takes everything after second colon
+			name:   "chatID containing colon (edge case, unusual but possible)",
+			userID: "group:channel:abc:def",
+			wantID: "abc:def", // SplitN with n=3 takes everything after second colon
 		},
 		{
-			name:     "numeric-only chatID",
-			userID:   "group:telegram:9876543210",
-			wantID:   "9876543210",
+			name:   "numeric-only chatID",
+			userID: "group:telegram:9876543210",
+			wantID: "9876543210",
 		},
 		{
-			name:     "alphanumeric chatID",
-			userID:   "group:slack:C1234567890",
-			wantID:   "C1234567890",
+			name:   "alphanumeric chatID",
+			userID: "group:slack:C1234567890",
+			wantID: "C1234567890",
 		},
 	}
 
@@ -322,12 +322,12 @@ func TestIsSessionInScope_MarkerBoundaryExactness(t *testing.T) {
 
 func TestIsSessionInScope_ComplexScenarios(t *testing.T) {
 	tests := []struct {
-		name              string
-		userID            string
-		sharedSessions    bool
-		targetKey         string
-		currentKey        string
-		wantInScope       bool
+		name           string
+		userID         string
+		sharedSessions bool
+		targetKey      string
+		currentKey     string
+		wantInScope    bool
 	}{
 		{
 			name:           "shared sessions overrides group restriction",

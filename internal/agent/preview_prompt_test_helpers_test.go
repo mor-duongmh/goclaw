@@ -46,9 +46,9 @@ type mockTool struct {
 	desc string
 }
 
-func (t *mockTool) Name() string                                          { return t.name }
-func (t *mockTool) Description() string                                   { return t.desc }
-func (t *mockTool) Parameters() map[string]any                            { return nil }
+func (t *mockTool) Name() string                                              { return t.name }
+func (t *mockTool) Description() string                                       { return t.desc }
+func (t *mockTool) Parameters() map[string]any                                { return nil }
 func (t *mockTool) Execute(_ context.Context, _ map[string]any) *tools.Result { return nil }
 
 // mockSkillsLoader implements the widened SkillsLoader interface.

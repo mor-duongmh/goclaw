@@ -54,13 +54,13 @@ func (t *MCPCredentialManagerTool) Parameters() map[string]any {
 				"description": "API key for the MCP server (only for set_credentials action).",
 			},
 			"headers": map[string]any{
-				"type":        "object",
-				"description": "Optional additional HTTP headers as a JSON object (only for set_credentials action).",
+				"type":                 "object",
+				"description":          "Optional additional HTTP headers as a JSON object (only for set_credentials action).",
 				"additionalProperties": map[string]any{"type": "string"},
 			},
 			"env": map[string]any{
-				"type":        "object",
-				"description": "Optional environment variables as a JSON object (only for set_credentials action).",
+				"type":                 "object",
+				"description":          "Optional environment variables as a JSON object (only for set_credentials action).",
 				"additionalProperties": map[string]any{"type": "string"},
 			},
 		},

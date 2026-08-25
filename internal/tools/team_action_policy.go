@@ -20,8 +20,8 @@ var fullActions = []string{
 	"progress", "attach", "update", "ask_user", "clear_ask_user", "retry",
 }
 
-func (FullTeamPolicy) IsAllowed(string) bool       { return true }
-func (FullTeamPolicy) AllowedActions() []string     { return fullActions }
+func (FullTeamPolicy) IsAllowed(string) bool    { return true }
+func (FullTeamPolicy) AllowedActions() []string { return fullActions }
 func (FullTeamPolicy) MemberGuidance() string {
 	return "Use comment(type='blocker') to escalate blockers to the leader. " +
 		"Use review to submit work for approval. " +
@@ -43,7 +43,7 @@ var liteBlocked = map[string]bool{
 }
 
 func (LiteTeamPolicy) IsAllowed(action string) bool { return !liteBlocked[action] }
-func (LiteTeamPolicy) AllowedActions() []string      { return liteActions }
+func (LiteTeamPolicy) AllowedActions() []string     { return liteActions }
 func (LiteTeamPolicy) MemberGuidance() string {
 	return "Use progress to update status. Use complete when finished."
 }

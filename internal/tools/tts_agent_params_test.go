@@ -16,7 +16,7 @@ import (
 // stubProvider is a test TTS provider that captures the last opts it received.
 type stubProvider struct {
 	name      string
-	failUntil int   // fail the first N calls, succeed thereafter
+	failUntil int // fail the first N calls, succeed thereafter
 	calls     int
 	lastOpts  tts.Options
 	shouldErr bool // if true, always fail

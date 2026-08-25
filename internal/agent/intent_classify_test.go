@@ -104,7 +104,7 @@ func (s *stubProvider) ChatStream(_ context.Context, _ providers.ChatRequest, _ 
 }
 
 func (s *stubProvider) DefaultModel() string { return "stub-model" }
-func (s *stubProvider) Name() string          { return "stub" }
+func (s *stubProvider) Name() string         { return "stub" }
 
 func TestClassifyIntent_FastPath_Cancel(t *testing.T) {
 	p := &stubProvider{response: "new_task"} // LLM would say new_task, but fast-path wins
@@ -265,15 +265,15 @@ func TestIsExactCancelKeyword_WithWhitespace(t *testing.T) {
 
 func TestIsExactCancelKeyword_NonMatches(t *testing.T) {
 	cases := []string{
-		"stop now",           // not exact
-		"please stop",        // not exact
-		"nonstop",            // embedded
-		"stop it",            // not exact
-		"cancel the order",   // not exact
-		"don't stop",         // not exact
-		"",                   // empty
-		"hello",              // unrelated
-		"làm đơn giản thôi",  // contains "thôi" but not exact
+		"stop now",          // not exact
+		"please stop",       // not exact
+		"nonstop",           // embedded
+		"stop it",           // not exact
+		"cancel the order",  // not exact
+		"don't stop",        // not exact
+		"",                  // empty
+		"hello",             // unrelated
+		"làm đơn giản thôi", // contains "thôi" but not exact
 	}
 	for _, msg := range cases {
 		t.Run(msg, func(t *testing.T) {

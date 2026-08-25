@@ -48,8 +48,8 @@ func NewTeamToolManager(teamStore store.TeamStore, agentStore store.AgentStore, 
 // (WorkspaceInterceptor, PostTurnProcessor, etc.).
 // ============================================================
 
-func (m *TeamToolManager) Store() store.TeamStore                { return m.teamStore }
-func (m *TeamToolManager) DataDir() string                       { return m.dataDir }
+func (m *TeamToolManager) Store() store.TeamStore { return m.teamStore }
+func (m *TeamToolManager) DataDir() string        { return m.dataDir }
 func (m *TeamToolManager) TryPublishInbound(msg bus.InboundMessage) bool {
 	if m.msgBus == nil {
 		return false

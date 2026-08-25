@@ -9,16 +9,16 @@ import (
 // teamAccessSettings defines access control rules stored in agent_teams.settings JSONB.
 // Empty/nil lists mean "no restriction". Deny lists take precedence over allow lists.
 type teamAccessSettings struct {
-	Version               *int     `json:"version,omitempty"`
-	AllowUserIDs          []string `json:"allow_user_ids"`
-	DenyUserIDs           []string `json:"deny_user_ids"`
-	AllowChannels         []string `json:"allow_channels"`
-	DenyChannels          []string `json:"deny_channels"`
+	Version              *int              `json:"version,omitempty"`
+	AllowUserIDs         []string          `json:"allow_user_ids"`
+	DenyUserIDs          []string          `json:"deny_user_ids"`
+	AllowChannels        []string          `json:"allow_channels"`
+	DenyChannels         []string          `json:"deny_channels"`
 	Notifications        *TeamNotifyConfig `json:"notifications,omitempty"`
 	FollowupIntervalMins *int              `json:"followup_interval_minutes,omitempty"`
-	FollowupMaxReminders  *int     `json:"followup_max_reminders,omitempty"`
-	EscalationMode        string   `json:"escalation_mode,omitempty"`
-	EscalationActions     []string `json:"escalation_actions,omitempty"`
+	FollowupMaxReminders *int              `json:"followup_max_reminders,omitempty"`
+	EscalationMode       string            `json:"escalation_mode,omitempty"`
+	EscalationActions    []string          `json:"escalation_actions,omitempty"`
 }
 
 // checkTeamAccess validates whether a user/channel combination is authorized

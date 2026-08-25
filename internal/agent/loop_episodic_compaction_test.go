@@ -26,8 +26,8 @@ func (r *recordingBus) Publish(event eventbus.DomainEvent) {
 func (r *recordingBus) Subscribe(_ eventbus.EventType, _ eventbus.DomainEventHandler) func() {
 	return func() {}
 }
-func (r *recordingBus) Start(_ context.Context)            {}
-func (r *recordingBus) Drain(_ time.Duration) error        { return nil }
+func (r *recordingBus) Start(_ context.Context)     {}
+func (r *recordingBus) Drain(_ time.Duration) error { return nil }
 func (r *recordingBus) events() []eventbus.DomainEvent {
 	r.mu.Lock()
 	defer r.mu.Unlock()

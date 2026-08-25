@@ -18,7 +18,7 @@ import (
 // fakeUserMCPTool is a minimal tools.Tool standing in for a per-user MCP BridgeTool.
 type fakeUserMCPTool struct{ name string }
 
-func (f *fakeUserMCPTool) Name() string              { return f.name }
+func (f *fakeUserMCPTool) Name() string               { return f.name }
 func (f *fakeUserMCPTool) Description() string        { return "per-user mcp tool stub" }
 func (f *fakeUserMCPTool) Parameters() map[string]any { return map[string]any{"type": "object"} }
 func (f *fakeUserMCPTool) Execute(context.Context, map[string]any) *tools.Result {
