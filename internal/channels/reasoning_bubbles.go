@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/llmtext"
 )
 
 const (
@@ -42,6 +43,15 @@ func (b *reasoningBubbleBuffer) append(content string) []string {
 
 func (b *reasoningBubbleBuffer) flush() []string {
 	if len(b.pending) == 0 || b.emitted >= reasoningBubbleMaxMessages {
+		return nil
+	}
+	// Reasoning is published into the channel, so it gets the same marker
+	// sanitization the final answer already gets. Strip on the accumulated
+	// buffer, not on each delta: always_bubbles forces provider streaming, so
+	// a marker like "[Tool Result" almost always arrives split across deltas
+	// and a per-delta guard would never match it.
+	b.pending = []rune(llmtext.StripReasoningLeaks(string(b.pending)))
+	if len(b.pending) == 0 {
 		return nil
 	}
 	var messages []string

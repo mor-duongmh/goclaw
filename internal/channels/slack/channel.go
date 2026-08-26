@@ -67,6 +67,7 @@ var _ channels.Channel = (*Channel)(nil)
 var _ channels.StreamingChannel = (*Channel)(nil)
 var _ channels.ReactionChannel = (*Channel)(nil)
 var _ channels.BlockReplyChannel = (*Channel)(nil)
+var _ channels.ReasoningDeliveryChannel = (*Channel)(nil)
 
 // New creates a new Slack channel from config.
 func New(cfg config.SlackConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore, pendingStore store.PendingMessageStore) (*Channel, error) {

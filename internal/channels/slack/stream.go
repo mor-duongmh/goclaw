@@ -135,6 +135,19 @@ func (c *Channel) CreateStream(_ context.Context, chatID string, _ bool) (channe
 // Slack streaming uses thread replies which have different UX from Telegram in-place edit.
 func (c *Channel) ReasoningStreamEnabled() bool { return false }
 
+// ReasoningDeliveryConfig implements channels.ReasoningDeliveryChannel.
+// Unset or unrecognized config resolves to off so existing Slack instances
+// keep their current behavior; reasoning delivery is opt-in per instance.
+// The legacy reasoning_stream bool is never returned — Slack never shipped it.
+func (c *Channel) ReasoningDeliveryConfig() (string, *bool) {
+	switch mode := channels.NormalizeReasoningDeliveryMode(c.config.ReasoningDelivery); mode {
+	case channels.ReasoningDeliveryStreamingOnly, channels.ReasoningDeliveryAlwaysBubbles:
+		return mode, nil
+	default:
+		return channels.ReasoningDeliveryOff, nil
+	}
+}
+
 func (c *Channel) FinalizeStream(_ context.Context, chatID string, stream channels.ChannelStream) {
 	ss, ok := stream.(*slackStream)
 	if !ok || ss.msgTS == "" {

@@ -198,7 +198,7 @@ func TestSlackStreamStopsAfterRepeatedFailures(t *testing.T) {
 	defer s.server.Close()
 
 	ss := newStreamForTest(t, newRetryTestChannel(t, s))
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		ss.lastUpdate = time.Time{} // stand in for a chunk arriving a second later
 		ss.Update(context.Background(), "chunk")
 	}
@@ -217,7 +217,7 @@ func TestSlackStreamFailureCounterResetsOnSuccess(t *testing.T) {
 	defer s.server.Close()
 
 	ss := newStreamForTest(t, newRetryTestChannel(t, s))
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		ss.lastUpdate = time.Time{}
 		ss.Update(context.Background(), "chunk")
 	}
@@ -228,4 +228,3 @@ func TestSlackStreamFailureCounterResetsOnSuccess(t *testing.T) {
 		t.Fatalf("attempts = %d, want %d — a success must clear the failure counter", got, want)
 	}
 }
-

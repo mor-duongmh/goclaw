@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/llmtext"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -41,7 +42,7 @@ func SanitizeAssistantContent(content string) string {
 	}
 
 	// 2. Strip downgraded tool call text ([Tool Call: ...], [Tool Result ...])
-	content = stripDowngradedToolCallText(content)
+	content = llmtext.StripDowngradedToolCalls(content)
 
 	// 3. Strip thinking/reasoning tags (<think>, <thinking>, <thought>, <antThinking>)
 	content = stripThinkingTags(content)
@@ -50,13 +51,13 @@ func SanitizeAssistantContent(content string) string {
 	content = stripFinalTags(content)
 
 	// 5. Strip echoed [System Message] blocks
-	content = stripEchoedSystemMessages(content)
+	content = llmtext.StripEchoedSystemMessages(content)
 
 	// 6. Collapse consecutive duplicate blocks
 	content = collapseConsecutiveDuplicateBlocks(content)
 
 	// 7. Strip MEDIA: paths from LLM output (media delivered separately)
-	content = stripMediaPaths(content)
+	content = llmtext.StripMediaPaths(content)
 
 	// 8. Strip leading blank lines (preserve indentation)
 	content = stripLeadingBlankLines(content)
@@ -181,49 +182,7 @@ func stripGarbledToolXML(content string) string {
 }
 
 // --- 2. Downgraded tool call text ---
-
-// stripDowngradedToolCallText removes [Tool Call: ...], [Tool Result ...],
-// and [Historical context: ...] blocks that some models emit as text.
-// Matching TS stripDowngradedToolCallText().
-// Uses line-by-line scanning (Go regexp doesn't support lookahead).
-func stripDowngradedToolCallText(content string) string {
-	if !strings.Contains(content, "[Tool Call:") &&
-		!strings.Contains(content, "[Tool Result") &&
-		!strings.Contains(content, "[Historical context:") {
-		return content
-	}
-
-	lines := strings.Split(content, "\n")
-	var result []string
-	skipping := false
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		// Start skipping on these markers
-		if strings.HasPrefix(trimmed, "[Tool Call:") ||
-			strings.HasPrefix(trimmed, "[Tool Result") ||
-			strings.HasPrefix(trimmed, "[Historical context:") {
-			skipping = true
-			continue
-		}
-
-		// Stop skipping on non-indented, non-empty line that isn't part of the block
-		if skipping {
-			// Arguments JSON and tool output are typically indented or empty
-			if trimmed == "" || strings.HasPrefix(trimmed, "Arguments:") ||
-				strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "}") {
-				continue
-			}
-			// Non-tool-block line → stop skipping
-			skipping = false
-		}
-
-		result = append(result, line)
-	}
-
-	return strings.TrimSpace(strings.Join(result, "\n"))
-}
+// Moved to internal/llmtext so internal/channels can reuse it for reasoning.
 
 // --- 3. Thinking/reasoning tags ---
 
@@ -270,47 +229,7 @@ func stripFinalTags(content string) string {
 }
 
 // --- 5. Echoed [System Message] ---
-
-// stripEchoedSystemMessages removes "[System Message] ..." blocks that LLMs
-// hallucinate/echo in their response text.
-// Uses line-based scanning (Go regexp doesn't support lookahead).
-func stripEchoedSystemMessages(content string) string {
-	if !strings.Contains(content, "[System Message]") {
-		return content
-	}
-
-	lines := strings.Split(content, "\n")
-	var result []string
-	skipping := false
-
-	for _, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "[System Message]") {
-			skipping = true
-			continue
-		}
-		if skipping {
-			// Empty line ends the system message block
-			if strings.TrimSpace(line) == "" {
-				skipping = false
-				continue
-			}
-			// Still part of the system message block (Stats:, reply instructions, etc.)
-			continue
-		}
-		result = append(result, line)
-	}
-
-	cleaned := strings.TrimSpace(strings.Join(result, "\n"))
-
-	if cleaned != strings.TrimSpace(content) {
-		slog.Warn("stripped echoed [System Message] from assistant response",
-			"original_len", len(content),
-			"cleaned_len", len(cleaned),
-		)
-	}
-
-	return cleaned
-}
+// Moved to internal/llmtext so internal/channels can reuse it for reasoning.
 
 // --- 6. Collapse consecutive duplicate blocks ---
 
@@ -346,33 +265,9 @@ func collapseConsecutiveDuplicateBlocks(content string) string {
 
 // --- 7. Strip MEDIA: paths ---
 
-// mediaPathPattern matches "MEDIA:" followed by a path (absolute or relative).
-var mediaPathPattern = regexp.MustCompile(`MEDIA:\S+`)
-
-// stripMediaPaths removes lines containing MEDIA:/path references from LLM output.
-// These are tool result artifacts that should not appear in user-facing text
-// (media files are delivered separately via OutboundMessage.Media).
-func stripMediaPaths(content string) string {
-	if !strings.Contains(content, "MEDIA:") {
-		return content
-	}
-	lines := strings.Split(content, "\n")
-	var result []string
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "[[audio_as_voice]]") {
-			continue
-		}
-		// Strip any line containing a MEDIA: path reference, regardless of wrapping format.
-		// LLMs echo these in many forms: bare "MEDIA:/path", markdown "![alt](MEDIA:relative/path)",
-		// JSON '{"image":"MEDIA:/path"}', etc. Match MEDIA: followed by any non-space path char.
-		if mediaPathPattern.MatchString(trimmed) {
-			continue
-		}
-		result = append(result, line)
-	}
-	return strings.TrimSpace(strings.Join(result, "\n"))
-}
+// mediaPathPattern is the shared MEDIA: path matcher, aliased here for
+// internal/agent callers (loop_media.go).
+var mediaPathPattern = llmtext.MediaPathPattern
 
 // --- 8. Strip leading blank lines ---
 
