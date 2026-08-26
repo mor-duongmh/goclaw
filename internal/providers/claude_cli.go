@@ -169,6 +169,18 @@ func (p *ClaudeCLIProvider) Capabilities() ProviderCapabilities {
 	}
 }
 
+// SupportsThinking implements ThinkingCapable.
+//
+// The CLI takes --effort (claude_cli_session.go buildArgs) and this provider
+// already parses the thinking blocks that come back — extractStreamContent for
+// the streaming path, the non-streaming parser for the rest. Without this
+// method ResolveReasoningDecision collapses every requested effort to "off"
+// ("provider does not support reasoning controls"), so --effort was never
+// passed and the agent's Thinking Level setting had no effect. Capabilities()
+// above already advertises Thinking: true; this closes the gap between that
+// claim and the reasoning resolver.
+func (p *ClaudeCLIProvider) SupportsThinking() bool { return true }
+
 // Close cleans up temp files (per-session MCP configs, hooks settings). Implements io.Closer.
 func (p *ClaudeCLIProvider) Close() error {
 	// Clean up per-session MCP config directories this provider created
