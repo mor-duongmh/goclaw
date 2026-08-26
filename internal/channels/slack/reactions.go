@@ -28,7 +28,7 @@ type reactionState struct {
 }
 
 // OnReactionEvent adds a status emoji reaction to the user's message.
-func (c *Channel) OnReactionEvent(_ context.Context, chatID string, messageID string, status string) error {
+func (c *Channel) OnReactionEvent(ctx context.Context, chatID string, messageID string, status string) error {
 	if c.config.ReactionLevel == "" || c.config.ReactionLevel == "off" {
 		return nil
 	}
@@ -56,15 +56,21 @@ func (c *Channel) OnReactionEvent(_ context.Context, chatID string, messageID st
 		return nil
 	}
 
+	// One budget covers the remove+add pair: these are cosmetic, they hold
+	// st.mu, and they run inline on the Socket Mode consumer, so a slow remove
+	// must not also buy the add a full budget of its own.
+	reactCtx, cancel := context.WithTimeout(ctx, slackAPICallTimeout)
+	defer cancel()
+
 	// Remove previous reaction (if different)
 	if st.currentEmoji != "" && st.currentEmoji != emoji {
-		if err := c.api.RemoveReaction(st.currentEmoji,
+		if err := c.api.RemoveReactionContext(reactCtx, st.currentEmoji,
 			slackapi.ItemRef{Channel: channelID, Timestamp: messageID}); err != nil {
 			slog.Debug("slack: remove reaction failed", "emoji", st.currentEmoji, "error", err)
 		}
 	}
 
-	if err := c.api.AddReaction(emoji,
+	if err := c.api.AddReactionContext(reactCtx, emoji,
 		slackapi.ItemRef{Channel: channelID, Timestamp: messageID}); err != nil {
 		slog.Debug("slack: add reaction failed", "emoji", emoji, "error", err)
 		return nil
@@ -76,7 +82,7 @@ func (c *Channel) OnReactionEvent(_ context.Context, chatID string, messageID st
 }
 
 // ClearReaction removes the current status emoji from a message.
-func (c *Channel) ClearReaction(_ context.Context, chatID string, messageID string) error {
+func (c *Channel) ClearReaction(ctx context.Context, chatID string, messageID string) error {
 	stateKey := chatID + ":" + messageID
 	stateVal, ok := c.reactions.LoadAndDelete(stateKey)
 	if !ok {
@@ -89,7 +95,9 @@ func (c *Channel) ClearReaction(_ context.Context, chatID string, messageID stri
 
 	if st.currentEmoji != "" {
 		channelID := extractChannelID(chatID)
-		if err := c.api.RemoveReaction(st.currentEmoji,
+		clearCtx, cancel := context.WithTimeout(ctx, slackAPICallTimeout)
+		defer cancel()
+		if err := c.api.RemoveReactionContext(clearCtx, st.currentEmoji,
 			slackapi.ItemRef{Channel: channelID, Timestamp: messageID}); err != nil {
 			slog.Debug("slack: clear reaction failed", "emoji", st.currentEmoji, "error", err)
 		}

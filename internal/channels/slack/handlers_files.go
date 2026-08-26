@@ -1,7 +1,7 @@
 package slack
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -204,29 +204,45 @@ func isAllowedSlackHost(host string) bool {
 
 // --- File upload (v2 3-step API) ---
 
-func (c *Channel) uploadFile(channelID, threadTS string, media bus.MediaAttachment) error {
-	filePath := media.URL
-	fileName := filepath.Base(filePath)
-
-	data, err := os.ReadFile(filePath)
+func (c *Channel) uploadFile(ctx context.Context, channelID, threadTS string, media bus.MediaAttachment) error {
+	params, err := uploadParams(channelID, threadTS, media)
 	if err != nil {
-		return fmt.Errorf("read file %s: %w", filePath, err)
+		return err
 	}
 
-	params := slackapi.UploadFileParameters{
-		Filename:        fileName,
-		FileSize:        len(data),
-		Reader:          bytes.NewReader(data),
-		Title:           fileName,
-		InitialComment:  media.Caption,
-		Channel:         channelID,
-		ThreadTimestamp: threadTS,
-	}
-
-	_, err = c.api.UploadFile(params)
-	if err != nil {
+	// No deadline of its own: every attachment of a reply shares the one budget
+	// Send opened, so N attachments cannot cost N upload budgets. Uploads stream
+	// their body, so slack-go will not retry them either.
+	if _, err := c.api.UploadFileContext(ctx, params); err != nil {
 		return fmt.Errorf("upload file: %w", err)
 	}
 
 	return nil
+}
+
+// uploadParams describes one attachment to slack-go, streaming the body from
+// disk instead of reading the whole file into memory first.
+//
+// That is not just about the allocation. slack-go's multipart writer runs in a
+// goroutine that reports on an UNBUFFERED channel which the caller stops reading
+// as soon as the request itself fails (misc.go postWithMultipartResponse), so an
+// upload cut short by a deadline or a cancel leaks that goroutine forever,
+// holding whatever reader it was handed. Handing it a path makes the library
+// open and close its own *os.File, so the leaked goroutine retains a closed file
+// handle rather than every byte of the attachment.
+func uploadParams(channelID, threadTS string, media bus.MediaAttachment) (slackapi.UploadFileParameters, error) {
+	info, err := os.Stat(media.URL)
+	if err != nil {
+		return slackapi.UploadFileParameters{}, fmt.Errorf("stat file %s: %w", media.URL, err)
+	}
+	fileName := filepath.Base(media.URL)
+	return slackapi.UploadFileParameters{
+		File:            media.URL,
+		Filename:        fileName,
+		FileSize:        int(info.Size()),
+		Title:           fileName,
+		InitialComment:  media.Caption,
+		Channel:         channelID,
+		ThreadTimestamp: threadTS,
+	}, nil
 }

@@ -8,20 +8,32 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// StartFlusher starts the background DB flush goroutine. No-op if RAM-only.
+// StartFlusher starts the background DB flush goroutine. No-op if RAM-only or
+// already started.
 func (ph *PendingHistory) StartFlusher() {
 	if ph.store == nil {
 		return
 	}
-	go ph.flushLoop()
+	ph.flusherOnce.Do(func() {
+		ph.flusherUp = true
+		go ph.flushLoop()
+	})
 }
 
-// StopFlusher stops the background flusher and flushes remaining buffer. No-op if RAM-only.
+// StopFlusher stops the background flusher and flushes the remaining buffer.
+// No-op if RAM-only or if the flusher never started. Safe to call more than once.
 func (ph *PendingHistory) StopFlusher() {
 	if ph.store == nil {
 		return
 	}
-	close(ph.stopCh)
+	// Racing on the same Once orders this read after any in-flight StartFlusher
+	// and leaves flusherUp false when the flusher never ran, so stopping a
+	// channel whose Start failed does not block forever on ph.stopped.
+	ph.flusherOnce.Do(func() {})
+	if !ph.flusherUp {
+		return
+	}
+	ph.stopOnce.Do(func() { close(ph.stopCh) })
 	<-ph.stopped
 }
 

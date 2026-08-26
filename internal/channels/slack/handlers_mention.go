@@ -68,7 +68,7 @@ func (c *Channel) handleAppMention(ev *slackevents.AppMentionEvent) {
 		replyThreadTS = ev.TimeStamp
 	}
 
-	c.postPlaceholder(channelID, localKey, replyThreadTS)
+	c.postPlaceholder(ctx, channelID, localKey, replyThreadTS)
 
 	annotated := fmt.Sprintf("[From: %s]\n%s", displayName, content)
 	finalContent := annotated
@@ -183,7 +183,11 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, channelID stri
 			"code":      code,
 		})
 	}
-	if _, _, err := c.api.PostMessage(channelID, slackapi.MsgOptionText(msg, false)); err != nil {
+	// Bounded: a pairing reply goes to a sender who failed the policy check, so
+	// it must never be able to hold the inbound consumer while retrying.
+	replyCtx, cancel := context.WithTimeout(ctx, slackAPICallTimeout)
+	defer cancel()
+	if _, _, err := c.api.PostMessageContext(replyCtx, channelID, slackapi.MsgOptionText(msg, false)); err != nil {
 		slog.Warn("slack: failed to send pairing reply",
 			"channel_id", channelID, "error", err)
 	}

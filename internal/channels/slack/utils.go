@@ -76,7 +76,11 @@ func (c *Channel) resolveDisplayName(userID string) string {
 		return cu.displayName
 	}
 
-	user, err := c.api.GetUserInfo(userID)
+	// Bounded: this runs inline on the single Socket Mode consumer, so an
+	// unbounded lookup freezes every inbound Slack event for this channel.
+	infoCtx, cancel := context.WithTimeout(context.Background(), slackAPICallTimeout)
+	defer cancel()
+	user, err := c.api.GetUserInfoContext(infoCtx, userID)
 	if err != nil {
 		slog.Debug("slack: failed to resolve user", "user_id", userID, "error", err)
 		return userID

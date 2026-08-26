@@ -70,6 +70,12 @@ type PendingHistory struct {
 	flushSignal chan struct{}
 	stopCh      chan struct{}
 	stopped     chan struct{}
+	// Stop must be idempotent across channel implementations (a start timeout
+	// stops the channel, then shutdown stops it again), and a channel whose
+	// Start failed early can be stopped without the flusher ever running.
+	flusherOnce sync.Once
+	stopOnce    sync.Once
+	flusherUp   bool // written inside flusherOnce; read only after a Do on it
 
 	// Tenant isolation for DB operations.
 	tenantID uuid.UUID

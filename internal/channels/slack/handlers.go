@@ -211,7 +211,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		replyThreadTS = ev.TimeStamp // start thread from the triggering message
 	}
 
-	c.postPlaceholder(channelID, localKey, replyThreadTS)
+	c.postPlaceholder(ctx, channelID, localKey, replyThreadTS)
 
 	// Build final content with group history context
 	finalContent := content

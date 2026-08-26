@@ -14,7 +14,7 @@ import (
 )
 
 // Send delivers an outbound message to Slack.
-func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
+func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	if !c.IsRunning() {
 		return fmt.Errorf("slack bot not running")
 	}
@@ -38,6 +38,37 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 	placeholderKey := msg.Metadata["placeholder_key"]
 	threadTS := c.resolveThreadTS(msg, placeholderKey)
 
+	// One attempt budget for the whole send. Nothing below re-wraps it, so the
+	// ceiling is the same whether this send posts one chunk or uploads four
+	// files.
+	attemptCtx, cancelAttempt := context.WithTimeout(ctx, sendBudget(msg))
+	defer cancelAttempt()
+
+	var (
+		reserveCtx    context.Context
+		cancelReserve context.CancelFunc
+	)
+	defer func() {
+		if cancelReserve != nil {
+			cancelReserve()
+		}
+	}()
+
+	// delivery picks the context for a content send. A send that replaces a
+	// failed attempt, or one starting on an already-spent attempt budget, gets
+	// the reserve instead — otherwise the attempt that burned the budget would
+	// take the answer down with it. The reserve is built once and shared, so N
+	// failed uploads claim one reserve between them, not N.
+	delivery := func(afterFailure bool) context.Context {
+		if !afterFailure && attemptCtx.Err() == nil {
+			return attemptCtx
+		}
+		if reserveCtx == nil {
+			reserveCtx, cancelReserve = context.WithTimeout(ctx, slackDeliveryReserve)
+		}
+		return reserveCtx
+	}
+
 	// Placeholder update (LLM retry notification) is the one interim message
 	// that belongs IN the placeholder, and it carries no placeholder_key — its
 	// ChatID is the local key, so it addresses the placeholder directly.
@@ -48,7 +79,7 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 		}
 		if pTS, ok := c.placeholders.Load(retryKey); ok {
 			ts := pTS.(string)
-			_, _, _, _ = c.api.UpdateMessage(channelID, ts,
+			_, _, _, _ = c.api.UpdateMessageContext(attemptCtx, channelID, ts,
 				slackapi.MsgOptionText(msg.Content, false))
 		}
 		return nil
@@ -60,7 +91,7 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 	// Media-only replies (attachment without caption) must not take this path.
 	if content == "" && len(msg.Media) == 0 {
 		if pTS, ok := c.placeholders.LoadAndDelete(placeholderKey); ok {
-			_, _, _ = c.api.DeleteMessage(channelID, pTS.(string))
+			_, _, _ = c.api.DeleteMessageContext(attemptCtx, channelID, pTS.(string))
 		}
 		return nil
 	}
@@ -84,14 +115,14 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 			"count", len(msg.Media))
 
 		if pTS, ok := c.placeholders.LoadAndDelete(placeholderKey); ok {
-			_, _, _ = c.api.DeleteMessage(channelID, pTS.(string))
+			_, _, _ = c.api.DeleteMessageContext(attemptCtx, channelID, pTS.(string))
 		}
 
 		for _, att := range msg.Media {
-			if err := c.uploadFile(channelID, threadTS, att); err != nil {
+			if err := c.uploadFile(attemptCtx, channelID, threadTS, att); err != nil {
 				slog.Warn("slack: file upload failed",
 					"file", att.URL, "error", err)
-				_ = c.sendChunked(channelID,
+				_ = c.sendChunked(delivery(true), channelID,
 					fmt.Sprintf("[File upload failed: %s]", filepath.Base(att.URL)), threadTS)
 			}
 		}
@@ -99,7 +130,9 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 		if content == "" {
 			return nil
 		}
-		return c.sendChunked(channelID, content, threadTS)
+		// The caption is the answer text for a media reply, so it falls back to
+		// the reserve when the uploads consumed the attempt budget.
+		return c.sendChunked(delivery(false), channelID, content, threadTS)
 	}
 
 	// Edit placeholder with first chunk, send rest as follow-ups
@@ -114,18 +147,22 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 			opts = append(opts, slackapi.MsgOptionTS(threadTS))
 		}
 
-		if _, _, _, editErr := c.api.UpdateMessage(channelID, ts, opts...); editErr == nil {
+		_, _, _, editErr := c.api.UpdateMessageContext(attemptCtx, channelID, ts, opts...)
+		if editErr == nil {
 			if remaining != "" {
-				return c.sendChunked(channelID, remaining, threadTS)
+				return c.sendChunked(delivery(false), channelID, remaining, threadTS)
 			}
 			return nil
-		} else {
-			slog.Warn("slack placeholder edit failed, sending new message",
-				"channel_id", channelID, "error", editErr)
 		}
+		// The edit is the only attempt that can fail with the answer still
+		// undelivered, and the fallback below is the last chance to deliver it,
+		// so it runs on the reserve rather than on whatever the failed edit left.
+		slog.Warn("slack placeholder edit failed, sending new message",
+			"channel_id", channelID, "error", editErr)
+		return c.sendChunked(delivery(true), channelID, content, threadTS)
 	}
 
-	return c.sendChunked(channelID, content, threadTS)
+	return c.sendChunked(delivery(false), channelID, content, threadTS)
 }
 
 // resolveThreadTS picks the thread a reply belongs to. Explicit routing metadata
@@ -147,28 +184,36 @@ func (c *Channel) resolveThreadTS(msg bus.OutboundMessage, placeholderKey string
 
 // postPlaceholder posts the "Thinking..." message and remembers its timestamp
 // so the final reply can edit it in place.
-func (c *Channel) postPlaceholder(channelID, localKey, threadTS string) {
+func (c *Channel) postPlaceholder(ctx context.Context, channelID, localKey, threadTS string) {
 	opts := []slackapi.MsgOption{slackapi.MsgOptionText("Thinking...", false)}
 	if threadTS != "" {
 		opts = append(opts, slackapi.MsgOptionTS(threadTS))
 	}
 
-	if _, ts, err := c.api.PostMessage(channelID, opts...); err == nil {
+	postCtx, cancel := context.WithTimeout(ctx, slackAPICallTimeout)
+	defer cancel()
+
+	if _, ts, err := c.api.PostMessageContext(postCtx, channelID, opts...); err == nil {
 		c.placeholders.Store(localKey, ts)
 	} else {
 		slog.Debug("slack: placeholder post failed", "channel_id", channelID, "error", err)
 	}
 }
 
-// sendChunked sends message chunks using markdown-aware splitting.
-func (c *Channel) sendChunked(channelID, content, threadTS string) error {
+// sendChunked sends message chunks using markdown-aware splitting. The deadline
+// comes from the caller: every chunk and every retry spends the one budget the
+// Send already opened, so a multi-chunk answer cannot extend the stall on this
+// shard chunk by chunk.
+func (c *Channel) sendChunked(ctx context.Context, channelID, content, threadTS string) error {
+	sendCtx := ctx
+
 	for _, chunk := range channels.ChunkMarkdown(content, maxMessageLen) {
 		opts := []slackapi.MsgOption{slackapi.MsgOptionText(chunk, false)}
 		if threadTS != "" {
 			opts = append(opts, slackapi.MsgOptionTS(threadTS))
 		}
 
-		if _, _, err := c.api.PostMessage(channelID, opts...); err != nil {
+		if _, _, err := c.api.PostMessageContext(sendCtx, channelID, opts...); err != nil {
 			return fmt.Errorf("send slack message: %w", err)
 		}
 	}

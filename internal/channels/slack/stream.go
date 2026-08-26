@@ -12,7 +12,24 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
-const streamThrottleInterval = 1000 * time.Millisecond
+const (
+	streamThrottleInterval = 1000 * time.Millisecond
+
+	// streamUpdateTimeout bounds one chat.update call group, retries included.
+	// Update runs inline on the bus broadcast path (internal/bus/bus.go:120-135
+	// invokes every subscriber synchronously while holding subMu.RLock), so an
+	// uncapped Retry-After sleep here stalls the goroutine that emitted the chunk
+	// plus every subscriber queued behind it. The caller hands us
+	// context.Background() (internal/channels/events.go:36), so this deadline is
+	// the only bound that exists.
+	streamUpdateTimeout = 10 * time.Second
+
+	// streamMaxFailures stops editing after this many consecutive failures. Each
+	// failing edit can burn a whole streamUpdateTimeout, once per remaining
+	// chunk, and the preview is cosmetic: Send() still writes the final answer
+	// into the same placeholder.
+	streamMaxFailures = 3
+)
 
 // slackStream implements channels.ChannelStream for Slack.
 // It edits the placeholder "Thinking..." message as chunks arrive.
@@ -21,15 +38,19 @@ type slackStream struct {
 	channelID  string
 	threadTS   string
 	msgTS      string    // placeholder message timestamp
-	lastUpdate time.Time // last chat.update call
+	lastUpdate time.Time // end of the last chat.update attempt, success or not
+	failures   int       // consecutive failed attempts; >= streamMaxFailures stops editing
 	mu         sync.Mutex
 }
 
 // Update edits the placeholder with accumulated text, throttled to avoid rate limits.
-func (s *slackStream) Update(_ context.Context, fullText string) {
+func (s *slackStream) Update(ctx context.Context, fullText string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.failures >= streamMaxFailures {
+		return
+	}
 	if time.Since(s.lastUpdate) < streamThrottleInterval {
 		return
 	}
@@ -40,13 +61,22 @@ func (s *slackStream) Update(_ context.Context, fullText string) {
 	}
 
 	opts := []slackapi.MsgOption{slackapi.MsgOptionText(formatted, false)}
-	_, _, _, err := s.api.UpdateMessage(s.channelID, s.msgTS, opts...)
+	callCtx, cancel := context.WithTimeout(ctx, streamUpdateTimeout)
+	_, _, _, err := s.api.UpdateMessageContext(callCtx, s.channelID, s.msgTS, opts...)
+	cancel()
+
+	// The throttle window reopens from when the attempt RETURNED, failures
+	// included. Leaving lastUpdate stale on error let every later chunk issue its
+	// own call, so one broken edit cost an API round trip per chunk instead of one
+	// per second. Telegram arms its throttle the same way
+	// (internal/channels/telegram/stream.go:236).
+	s.lastUpdate = time.Now()
 	if err != nil {
-		slog.Debug("slack stream chunk update failed", "error", err)
+		s.failures++
+		slog.Debug("slack stream chunk update failed", "error", err, "failures", s.failures)
 		return
 	}
-
-	s.lastUpdate = time.Now()
+	s.failures = 0
 }
 
 // Stop finalizes the stream. For Slack, Send() handles the final edit via the placeholder map,

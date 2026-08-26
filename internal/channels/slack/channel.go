@@ -138,23 +138,33 @@ func (c *Channel) Start(ctx context.Context) error {
 	c.GroupHistory().StartFlusher()
 	slog.Info("starting slack bot (socket mode)")
 
-	c.api = slackapi.New(
+	c.api = newSlackAPIClient(
 		c.config.BotToken,
 		slackapi.OptionAppLevelToken(c.config.AppToken),
 	)
 
 	if c.config.UserToken != "" {
-		c.userAPI = slackapi.New(c.config.UserToken)
+		c.userAPI = newSlackAPIClient(c.config.UserToken)
 		slog.Info("slack user token configured (custom identity enabled)")
 	}
 
-	authResp, err := c.api.AuthTest()
+	authCtx, authCancel := context.WithTimeout(ctx, slackAuthTimeout)
+	authResp, err := c.api.AuthTestContext(authCtx)
+	authCancel()
 	if err != nil {
+		// The flusher started before this point, a failed Start is never retried,
+		// and the channel stays registered. Release it here instead of leaving the
+		// goroutine alive until process shutdown.
+		c.GroupHistory().StopFlusher()
 		return fmt.Errorf("slack auth.test failed: %w", err)
 	}
 	c.botUserID = authResp.UserID
 	c.teamID = authResp.TeamID
 
+	// socketmode.New copies *c.api by value into its embedded slack.Client, so
+	// every method promoted onto c.sm AND the apps.connections.open call inside
+	// RunContext run on c.api's retry client and transport. Handing this a
+	// separately built client would silently create a second, unpoliced one.
 	c.sm = socketmode.New(
 		c.api,
 		socketmode.OptionDebug(false),
