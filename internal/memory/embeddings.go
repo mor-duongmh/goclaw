@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
 // ContentHash returns a short SHA256 hex digest of the content (first 16 bytes).
@@ -156,6 +158,10 @@ func NewOpenAIEmbeddingProvider(name, apiKey, apiURL, model string) *OpenAIEmbed
 	if model == "" {
 		model = "text-embedding-3-small"
 	}
+	// Rewrite loopback hosts to host.docker.internal when running inside Docker,
+	// centralized here so no call site (verify handler, runtime memory embedding)
+	// can reach the container itself instead of a host service like Ollama.
+	apiURL = config.DockerLocalhost(apiURL)
 
 	return &OpenAIEmbeddingProvider{
 		name:       name,

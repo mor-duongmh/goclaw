@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -91,6 +92,10 @@ func TestSubagentExecTool_NilStoreIsSafe(t *testing.T) {
 
 func captureEmbeddingRequest(t *testing.T, es *store.EmbeddingSettings) map[string]any {
 	t.Helper()
+
+	// Pin Docker detection off so the loopback httptest URL is not rewritten
+	// to host.docker.internal when this suite runs inside a container.
+	t.Cleanup(config.SetInDockerForTest(false))
 
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
