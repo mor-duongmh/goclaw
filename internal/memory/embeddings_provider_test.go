@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
 func TestOpenAIEmbeddingProviderRestoresResponseOrder(t *testing.T) {
@@ -49,4 +52,33 @@ func TestOpenAIEmbeddingProviderUsesBoundedHTTPClient(t *testing.T) {
 	if provider.httpClient == nil || provider.httpClient.Timeout != 60*time.Second {
 		t.Fatalf("HTTP timeout = %v, want 60s", provider.httpClient)
 	}
+}
+
+func TestOpenAIEmbeddingProviderRewritesLoopbackInDocker(t *testing.T) {
+	restore := config.SetInDockerForTest(true)
+	defer restore()
+
+	provider := NewOpenAIEmbeddingProvider("ollama", "", "http://localhost:11434/v1", "nomic-embed-text")
+	if provider.apiURL != "http://host.docker.internal:11434/v1" {
+		t.Fatalf("apiURL = %q, want Docker localhost rewrite applied in constructor", provider.apiURL)
+	}
+}
+
+func TestOpenAIEmbeddingProviderKeepsLoopbackOutsideDocker(t *testing.T) {
+	restore := config.SetInDockerForTest(false)
+	defer restore()
+
+	provider := NewOpenAIEmbeddingProvider("ollama", "", "http://localhost:11434/v1", "nomic-embed-text")
+	if provider.apiURL != "http://localhost:11434/v1" {
+		t.Fatalf("apiURL = %q, want unchanged outside Docker", provider.apiURL)
+	}
+}
+
+// TestMain pins Docker detection off so the httptest-based Embed tests above
+// stay deterministic even when the test binary itself runs inside a container.
+func TestMain(m *testing.M) {
+	restore := config.SetInDockerForTest(false)
+	code := m.Run()
+	restore()
+	os.Exit(code)
 }
