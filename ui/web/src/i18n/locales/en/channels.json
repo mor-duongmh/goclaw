@@ -390,7 +390,12 @@
     },
     "reasoning_delivery": {
       "label": "Show Reasoning",
-      "help": "Choose how model reasoning is shown in channel messages."
+      "help": "Choose how model reasoning is shown in channel messages. \"Always as bubbles\" posts it as separate messages into the channel, group channels included — everyone in the channel sees it, and in a group run the reasoning can quote other participants' messages."
+    },
+    "show_placeholder": {
+      "label": "Show \"Thinking...\" Placeholder",
+      "help": "Post a placeholder message that the answer later edits in place. Turning it off means there is no receipt until the answer arrives — quick ack is not a substitute, it stays off unless you configure it.",
+      "disabledHint": "Always as bubbles posts the answer after the reasoning, so the placeholder is forced off."
     },
     "reaction_level": {
       "label": "Reaction Level"
@@ -698,7 +703,7 @@
       },
       "reasoning_delivery": {
         "label": "Show Reasoning",
-        "help": "Choose how model reasoning is shown in channel messages."
+        "help": "Choose how model reasoning is shown in channel messages. \"Always as bubbles\" posts it as separate messages into the channel, group channels included — everyone in the channel sees it, and in a group run the reasoning can quote other participants' messages."
       }
     },
     "fields": {

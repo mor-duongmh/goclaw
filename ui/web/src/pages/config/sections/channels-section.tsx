@@ -68,7 +68,9 @@ export function ChannelsSection({ data, onSave, saving }: Props) {
     // Strip masked secret fields
     const toSave: ChannelsData = {};
     for (const [ch, val] of Object.entries(draft)) {
-      const copy = normalizeReasoningDeliveryConfig({ ...val });
+      // Per-channel fallback: an unrecognizable Slack value must resolve to off,
+      // matching internal/config/channel_reasoning_delivery.go.
+      const copy = normalizeReasoningDeliveryConfig({ ...val }, ch);
       const meta = CHANNEL_META[ch];
       if (meta?.secretField && isSecret(copy[meta.secretField])) {
         delete copy[meta.secretField];
@@ -232,7 +234,7 @@ export function ChannelsSection({ data, onSave, saving }: Props) {
                           <div className="rounded-md border px-3 py-2 grid gap-1.5 sm:col-span-2">
                             <Label>{t("channels.reasoningDelivery")}</Label>
                             <Select
-                              value={resolveReasoningDeliveryValue(chData)}
+                              value={resolveReasoningDeliveryValue(chData, ch)}
                               onValueChange={(v) => updateChannel(ch, { reasoning_delivery: v, reasoning_stream: undefined })}
                             >
                               <SelectTrigger><SelectValue /></SelectTrigger>

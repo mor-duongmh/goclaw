@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { configSchema } from "./channel-schemas";
 import { deliveryModelKey, isDeliveryModelKey, isDeliveryProviderKey } from "./channel-delivery-provider-fields";
 import { normalizeReasoningDeliveryConfig, resolveReasoningDeliveryValue } from "./reasoning-delivery-config";
+import { getAdvancedFields } from "./channel-detail/channel-advanced-dialog";
 
 describe("telegram configSchema", () => {
   const telegramConfig = configSchema["telegram"]!;
@@ -173,5 +174,64 @@ describe("pancake configSchema", () => {
     expect(f).toBeDefined();
     expect(f!.type).toBe("tags");
     expect(f!.showWhen).toEqual({ key: "features.auto_react", value: "true" });
+  });
+});
+
+describe("slack configSchema", () => {
+  const slackConfig = configSchema["slack"]!;
+
+  it("defaults reasoning delivery to off, unlike telegram", () => {
+    const field = slackConfig.find((f) => f.key === "reasoning_delivery");
+    expect(field).toBeDefined();
+    expect(field!.type).toBe("select");
+    // Slack reasoning is opt-in per instance; telegram keeps streaming_only.
+    expect(field!.defaultValue).toBe("off");
+    expect(configSchema["telegram"]!.find((f) => f.key === "reasoning_delivery")!.defaultValue).toBe("streaming_only");
+    expect(field!.options!.map((o) => o.value)).toEqual(["streaming_only", "always_bubbles", "off"]);
+  });
+
+  it("discloses that bubbles reach group channels", () => {
+    const help = slackConfig.find((f) => f.key === "reasoning_delivery")!.help ?? "";
+    expect(help).toMatch(/group/i);
+  });
+
+  it("exposes the placeholder toggle disabled under always_bubbles", () => {
+    const field = slackConfig.find((f) => f.key === "show_placeholder");
+    expect(field).toBeDefined();
+    expect(field!.type).toBe("boolean");
+    expect(field!.defaultValue).toBe(true);
+    // The backend forces it off, so the UI must not offer an editable switch.
+    expect(field!.disabledWhen).toMatchObject({ key: "reasoning_delivery", value: "always_bubbles" });
+    expect(field!.disabledWhen!.hint).toBeTruthy();
+  });
+
+  it("groups both fields under Streaming in the advanced dialog", () => {
+    const streamingKeys = getAdvancedFields("slack").streaming.map((f) => f.key);
+    expect(streamingKeys).toContain("reasoning_delivery");
+    expect(streamingKeys).toContain("show_placeholder");
+  });
+});
+
+describe("reasoning delivery resolution", () => {
+  it("falls back per channel so the form matches the Go default", () => {
+    expect(resolveReasoningDeliveryValue({}, "slack")).toBe("off");
+    expect(resolveReasoningDeliveryValue({}, "telegram")).toBe("streaming_only");
+    expect(resolveReasoningDeliveryValue({})).toBe("streaming_only");
+  });
+
+  it("keeps an unrecognizable Slack value off instead of enabling reasoning", () => {
+    expect(resolveReasoningDeliveryValue({ reasoning_delivery: "bogus" }, "slack")).toBe("off");
+    expect(resolveReasoningDeliveryValue({ reasoning_stream: true }, "slack")).toBe("off");
+  });
+
+  it("canonicalizes case and whitespace like the backend", () => {
+    expect(resolveReasoningDeliveryValue({ reasoning_delivery: "Always_Bubbles" })).toBe("always_bubbles");
+    expect(resolveReasoningDeliveryValue({ reasoning_delivery: " always_bubbles " })).toBe("always_bubbles");
+    expect(resolveReasoningDeliveryValue({ reasoning_delivery: "OFF" }, "slack")).toBe("off");
+  });
+
+  it("leaves a config without reasoning keys untouched", () => {
+    const config = { dm_policy: "pairing", history_limit: 50 };
+    expect(normalizeReasoningDeliveryConfig(config, "slack")).toEqual(config);
   });
 });

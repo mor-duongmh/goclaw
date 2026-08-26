@@ -389,7 +389,12 @@
     },
     "reasoning_delivery": {
       "label": "Hiện suy luận",
-      "help": "Chọn cách hiển thị suy luận của model trong tin nhắn channel."
+      "help": "Chọn cách hiển thị suy luận của model trong tin nhắn kênh. \"Luôn dạng bubble\" đăng suy luận thành các tin nhắn riêng vào kênh, kể cả kênh nhóm — mọi người trong kênh đều thấy, và trong lượt chạy nhóm suy luận có thể dẫn lại tin nhắn của người khác."
+    },
+    "show_placeholder": {
+      "label": "Hiện tin nhắn chờ \"Thinking...\"",
+      "help": "Đăng một tin nhắn chờ để câu trả lời sửa lại tại chỗ. Tắt đi thì không có phản hồi nào cho tới khi câu trả lời tới — quick ack không thay thế được, nó luôn tắt trừ khi bạn cấu hình.",
+      "disabledHint": "Chế độ luôn dạng bubble đăng câu trả lời sau suy luận, nên tin nhắn chờ bị buộc tắt."
     },
     "reaction_level": {
       "label": "Mức độ reaction"
@@ -586,7 +591,7 @@
     },
     "reasoning_delivery": {
       "streaming_only": "Chỉ khi streaming",
-      "always_bubbles": "Luôn thành bubble",
+      "always_bubbles": "Luôn dạng bubble",
       "off": "Tắt"
     },
     "telegram_manager": {
@@ -697,7 +702,7 @@
       },
       "reasoning_delivery": {
         "label": "Hiện suy luận",
-        "help": "Chọn cách hiển thị suy luận của model trong tin nhắn channel."
+        "help": "Chọn cách hiển thị suy luận của model trong tin nhắn kênh. \"Luôn dạng bubble\" đăng suy luận thành các tin nhắn riêng vào kênh, kể cả kênh nhóm — mọi người trong kênh đều thấy, và trong lượt chạy nhóm suy luận có thể dẫn lại tin nhắn của người khác."
       }
     },
     "fields": {

@@ -28,7 +28,7 @@ interface ChannelAdvancedDialogProps {
 
 const NETWORK_KEYS = new Set(["api_server", "proxy", "domain", "connection_mode", "webhook_port", "webhook_path", "webhook_url"]);
 const LIMITS_KEYS = new Set(["history_limit", "media_max_mb", "text_chunk_limit"]);
-const STREAMING_KEYS = new Set(["dm_stream", "group_stream", "draft_transport", "reasoning_delivery", "native_stream", "debounce_delay", "thread_ttl"]);
+const STREAMING_KEYS = new Set(["dm_stream", "group_stream", "draft_transport", "reasoning_delivery", "show_placeholder", "native_stream", "debounce_delay", "thread_ttl"]);
 const BEHAVIOR_KEYS = new Set(["reaction_level", "link_preview", "render_mode", "topic_session_mode"]);
 const ACCESS_KEYS = new Set(["allow_from", "group_allow_from"]);
 const TELEGRAM_MANAGEMENT_KEYS = new Set(["telegram_manager.enabled", "telegram_manager.allowed_actions"]);
@@ -56,14 +56,14 @@ export function ChannelAdvancedDialog({
   const { t } = useTranslation("channels");
   const groups = getAdvancedFields(instance.channel_type);
 
-  const [values, setValues] = useState<Record<string, unknown>>(() => deriveAdvancedInitialValues(instance.config));
+  const [values, setValues] = useState<Record<string, unknown>>(() => deriveAdvancedInitialValues(instance.config, instance.channel_type));
   const [saving, setSaving] = useState(false);
   const [refreshingMetadata, setRefreshingMetadata] = useState(false);
 
   // Re-sync local state when dialog opens
   useEffect(() => {
     if (!open) return;
-    setValues(deriveAdvancedInitialValues(instance.config));
+    setValues(deriveAdvancedInitialValues(instance.config, instance.channel_type));
   }, [open, instance]);
 
   const handleChange = useCallback((key: string, value: unknown) => {
@@ -73,7 +73,7 @@ export function ChannelAdvancedDialog({
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onUpdate({ config: buildAdvancedConfigUpdate(instance.config, values) });
+      await onUpdate({ config: buildAdvancedConfigUpdate(instance.config, values, instance.channel_type) });
       onOpenChange(false);
     } catch { // toast shown by hook
     } finally {

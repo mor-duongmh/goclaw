@@ -7,8 +7,11 @@ function isAdvancedConfigKey(key: string): boolean {
   return !ESSENTIAL_CONFIG_KEYS.has(key) && key !== "groups" && !key.startsWith("groups.");
 }
 
-export function deriveAdvancedInitialValues(config: Record<string, unknown> | null | undefined): Record<string, unknown> {
-  const normalized = normalizeReasoningDeliveryConfig({ ...((config ?? {}) as Record<string, unknown>) });
+export function deriveAdvancedInitialValues(
+  config: Record<string, unknown> | null | undefined,
+  channelType?: string,
+): Record<string, unknown> {
+  const normalized = normalizeReasoningDeliveryConfig({ ...((config ?? {}) as Record<string, unknown>) }, channelType);
   const flat = flattenConfig(normalized);
   // Only keep advanced keys (exclude essential + group overrides).
   return Object.fromEntries(
@@ -19,8 +22,9 @@ export function deriveAdvancedInitialValues(config: Record<string, unknown> | nu
 export function buildAdvancedConfigUpdate(
   existingConfig: Record<string, unknown> | null | undefined,
   values: Record<string, unknown>,
+  channelType?: string,
 ): Record<string, unknown> {
-  const normalized = normalizeReasoningDeliveryConfig({ ...((existingConfig ?? {}) as Record<string, unknown>) });
+  const normalized = normalizeReasoningDeliveryConfig({ ...((existingConfig ?? {}) as Record<string, unknown>) }, channelType);
   const flat = flattenConfig(normalized);
 
   for (const [key, value] of Object.entries(values)) {
@@ -32,5 +36,5 @@ export function buildAdvancedConfigUpdate(
     flat[key] = value;
   }
 
-  return normalizeReasoningDeliveryConfig(unflattenConfig(flat));
+  return normalizeReasoningDeliveryConfig(unflattenConfig(flat), channelType);
 }
