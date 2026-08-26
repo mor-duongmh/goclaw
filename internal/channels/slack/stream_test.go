@@ -5,6 +5,11 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	slackapi "github.com/slack-go/slack"
+
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
 func TestExtractChannelID(t *testing.T) {
@@ -226,5 +231,50 @@ func TestSlackStreamFailureCounterResetsOnSuccess(t *testing.T) {
 	want := 2 + streamMaxFailures
 	if got := s.attemptsFor("/chat.update"); got != want {
 		t.Fatalf("attempts = %d, want %d — a success must clear the failure counter", got, want)
+	}
+}
+
+// CreateStream with no placeholder returns a stream whose msgTS is empty and
+// whose own comment calls it a no-op — but Update had no guard for that, so it
+// issued chat.update with an empty ts. Phase 1's throttle-on-failure plus the
+// consecutive-failure cap already bound the damage to 3 doomed calls per run
+// rather than one per chunk; this makes it zero. The state is reachable because
+// dm_stream / group_stream are independent of reasoning_delivery, and
+// always_bubbles forces the placeholder off.
+func TestSlackStreamUpdateIsNoopWithoutPlaceholder(t *testing.T) {
+	s := newScriptedSlack(nil)
+	defer s.server.Close()
+
+	ch, err := New(config.SlackConfig{BotToken: "xoxb-test", AppToken: "xapp-test"}, bus.New(), nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ch.api = slackapi.New("xoxb-test", slackapi.OptionAPIURL(s.server.URL+"/"))
+
+	st, err := ch.CreateStream(context.Background(), "C1", false)
+	if err != nil {
+		t.Fatalf("CreateStream: %v", err)
+	}
+	ss, ok := st.(*slackStream)
+	if !ok {
+		t.Fatalf("CreateStream returned %T", st)
+	}
+	if ss.msgTS != "" {
+		t.Fatalf("msgTS = %q, want empty for a stream with no placeholder", ss.msgTS)
+	}
+
+	for i := range 20 {
+		ss.Update(context.Background(), "chunk")
+		// Defeat the 1/s throttle so the guard, not the throttle, is what is
+		// being measured.
+		ss.mu.Lock()
+		ss.lastUpdate = time.Time{}
+		ss.failures = 0
+		ss.mu.Unlock()
+		_ = i
+	}
+
+	if got := s.attemptsFor("/chat.update"); got != 0 {
+		t.Fatalf("chat.update called %d times on a stream with no message to edit", got)
 	}
 }

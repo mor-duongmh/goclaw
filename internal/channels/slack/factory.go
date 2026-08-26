@@ -33,6 +33,7 @@ type slackInstanceConfig struct {
 	DebounceDelay     *int                       `json:"debounce_delay,omitempty"`
 	ThreadTTL         *int                       `json:"thread_ttl,omitempty"`
 	ReasoningDelivery string                     `json:"reasoning_delivery,omitempty"`
+	ShowPlaceholder   *bool                      `json:"show_placeholder,omitempty"`
 }
 
 // FactoryWithPendingStore returns a ChannelFactory with persistent history support.
@@ -79,6 +80,7 @@ func FactoryWithPendingStore(pendingStore store.PendingMessageStore) channels.Ch
 			DebounceDelay:     ic.DebounceDelay,
 			ThreadTTL:         ic.ThreadTTL,
 			ReasoningDelivery: ic.ReasoningDelivery,
+			ShowPlaceholder:   ic.ShowPlaceholder,
 		}
 
 		if slackCfg.GroupPolicy == "" {

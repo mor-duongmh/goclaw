@@ -291,7 +291,7 @@ func processNormalMessage(
 	deliveryRuntime := buildDeliveryRuntime(ctx, deps, agentLoop, chatBehavior, msg, userID, peerKind, resolveChannelType(deps.ChannelMgr, msg.Channel), agentID)
 	toolStatus := deps.Cfg.Gateway.ToolStatus == nil || *deps.Cfg.Gateway.ToolStatus // default true
 	if deps.ChannelMgr != nil {
-		deps.ChannelMgr.RegisterRunWithDelivery(runID, msg.Channel, chatIDForRun, messageID, outMeta, msg.TenantID, channelStream, blockReply, toolStatus, chatBehavior, deliveryRuntime, reasoningDelivery)
+		deps.ChannelMgr.RegisterRunWithDelivery(runID, msg.Channel, chatIDForRun, msg.ChatID, messageID, outMeta, msg.TenantID, channelStream, blockReply, toolStatus, chatBehavior, deliveryRuntime, reasoningDelivery)
 	}
 
 	// Group-aware system prompt: help the LLM adapt tone and behavior for group chats.
@@ -549,7 +549,7 @@ func processNormalMessage(
 					Channel:  channel,
 					ChatID:   chatID,
 					Content:  "",
-					Metadata: meta,
+					Metadata: withRunOutcome(meta, bus.RunOutcomeCancelled),
 					TenantID: tenantID,
 					AgentID:  agentUUID,
 				})
@@ -569,7 +569,7 @@ func processNormalMessage(
 				Channel:  channel,
 				ChatID:   chatID,
 				Content:  errContent,
-				Metadata: meta,
+				Metadata: withRunOutcome(meta, bus.RunOutcomeFailed),
 				TenantID: tenantID,
 				AgentID:  agentUUID,
 			})
@@ -661,6 +661,20 @@ func processNormalMessage(
 			go autoSetFollowup(ctx, deps.TeamStore, deps.AgentStore, agentKey, channel, chatID, replyContent)
 		}
 	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, peerKind, inboundMessage, outMeta, blockReply, chatBehavior, channelStream, ptd, msg.TenantID, agentLoop.UUID(), agentLoop.OtherConfig())
+}
+
+// withRunOutcome tags a terminal outbound message with why its content is
+// empty. Channels cannot otherwise distinguish a crashed run from a deliberate
+// silence, because all four terminal paths publish empty content to trigger
+// placeholder cleanup. Returns a copy — the run metadata map is shared with
+// every other message of the turn.
+func withRunOutcome(meta map[string]string, outcome string) map[string]string {
+	out := make(map[string]string, len(meta)+1)
+	for k, v := range meta {
+		out[k] = v
+	}
+	out[bus.MetaRunOutcome] = outcome
+	return out
 }
 
 func buildDeliveryRuntime(ctx context.Context, deps *ConsumerDeps, agentLoop agent.Agent, behavior channels.ResolvedChatBehavior, msg bus.InboundMessage, userID, peerKind, channelType, agentKey string) channels.DeliveryRuntime {

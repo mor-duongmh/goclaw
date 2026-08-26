@@ -30,8 +30,13 @@ type ChannelStream interface {
 
 // RunContext tracks an active agent run for streaming/reaction event forwarding.
 type RunContext struct {
-	ChannelName          string
-	ChatID               string
+	ChannelName string
+	ChatID      string
+	// DispatchChatID is the ChatID the final answer will be published with.
+	// Intermediate messages keep addressing the run by ChatID but dispatch on
+	// this key, so they cannot be overtaken by the answer. See
+	// bus.OutboundMessage.ShardKey.
+	DispatchChatID       string
 	MessageID            string            // platform message ID (string to support Feishu "om_xxx", Telegram "12345", etc.)
 	Metadata             map[string]string // outbound routing metadata (thread_id, local_key, group_id)
 	TenantID             uuid.UUID         // tenant scope for per-tenant TTS

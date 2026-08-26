@@ -45,6 +45,16 @@ type OutboundMessage struct {
 	TenantID         uuid.UUID         `json:"tenant_id,omitempty"`          // tenant scope for per-tenant TTS
 	AgentID          uuid.UUID         `json:"agent_id,omitempty"`           // agent scope for per-agent TTS voice override
 	AgentOtherConfig []byte            `json:"agent_other_config,omitempty"` // agent's other_config for TTS voice/model
+
+	// ShardKey overrides ChatID when the outbound dispatcher picks a worker.
+	// A run addresses its intermediate messages (reasoning bubbles, quick ack,
+	// progress, retry notices, block replies) by its composite local key while
+	// the final answer uses the bare chat id; those hash to different shards,
+	// so without this the two streams race and the answer can be delivered
+	// before the reasoning that produced it. Set it to the ChatID the answer
+	// will use. Empty means "shard by ChatID". In-process only — ordering is a
+	// dispatch concern, not part of the message.
+	ShardKey string `json:"-"`
 }
 
 // Metadata keys on OutboundMessage.Metadata used to track the origin chat of
@@ -57,6 +67,17 @@ type OutboundMessage struct {
 const (
 	MetaForwardOriginChannel = "forward_origin_channel"
 	MetaForwardOriginChatID  = "forward_origin_chat_id"
+)
+
+// MetaRunOutcome names why a terminal outbound message carries empty content.
+// Empty content is how a run signals "clean up the placeholder", and four
+// different outcomes use it, so a channel cannot otherwise tell a crash from a
+// deliberate silence. Only failures are annotated: cancellation and NO_REPLY
+// stay silent by design.
+const (
+	MetaRunOutcome      = "run_outcome"
+	RunOutcomeFailed    = "failed"
+	RunOutcomeCancelled = "cancelled"
 )
 
 // MediaAttachment represents a media file to be sent with a message.

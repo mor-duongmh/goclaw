@@ -81,15 +81,36 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 			ts := pTS.(string)
 			_, _, _, _ = c.api.UpdateMessageContext(attemptCtx, channelID, ts,
 				slackapi.MsgOptionText(msg.Content, false))
+			return nil
 		}
-		return nil
+		// No placeholder to hold the notice, which is the normal state when the
+		// placeholder is off or always_bubbles forced it off. Returning silently
+		// there left the user waiting out a multi-minute provider backoff with
+		// no signal at all.
+		return c.sendChunked(delivery(false), channelID, msg.Content, threadTS)
 	}
 
 	content := msg.Content
 
-	// NO_REPLY: delete placeholder, return.
+	// Empty content is how four different outcomes ask for placeholder cleanup,
+	// so the run has to say which one it was. A failure must stay visible: with
+	// the placeholder off there is nothing to delete, and reasoning bubbles
+	// would be the only trace of the turn — reasoning with no conclusion reads
+	// as if the agent simply stopped. Cancellation and NO_REPLY keep their
+	// silence: the user asked to stop, or the agent chose not to answer.
 	// Media-only replies (attachment without caption) must not take this path.
 	if content == "" && len(msg.Media) == 0 {
+		if msg.Metadata[bus.MetaRunOutcome] == bus.RunOutcomeFailed {
+			if pTS, ok := c.placeholders.LoadAndDelete(placeholderKey); ok {
+				_, _, _, editErr := c.api.UpdateMessageContext(attemptCtx, channelID, pTS.(string),
+					slackapi.MsgOptionText(channels.GenericFailureNotice, false))
+				if editErr == nil {
+					return nil
+				}
+				return c.sendChunked(delivery(true), channelID, channels.GenericFailureNotice, threadTS)
+			}
+			return c.sendChunked(delivery(false), channelID, channels.GenericFailureNotice, threadTS)
+		}
 		if pTS, ok := c.placeholders.LoadAndDelete(placeholderKey); ok {
 			_, _, _ = c.api.DeleteMessageContext(attemptCtx, channelID, pTS.(string))
 		}
@@ -182,9 +203,38 @@ func (c *Channel) resolveThreadTS(msg bus.OutboundMessage, placeholderKey string
 	return ""
 }
 
+// shouldPostPlaceholder reports whether this instance posts the "Thinking..."
+// message that a reply later edits in place.
+//
+// always_bubbles forces it off regardless of config: the answer is an edit of a
+// message posted before the reasoning, so in a chronological Slack thread it
+// would render above the bubbles it is meant to conclude. Derived from the
+// resolver rather than a raw string compare, so it cannot disagree with
+// ResolvedReasoningDelivery.BubbleDelivery.
+func (c *Channel) shouldPostPlaceholder() bool {
+	if channels.ResolveReasoningDelivery(c.ReasoningDeliveryConfig()).BubbleDelivery {
+		return false
+	}
+	return c.showPlaceholder
+}
+
 // postPlaceholder posts the "Thinking..." message and remembers its timestamp
 // so the final reply can edit it in place.
+//
+// The gate lives here rather than at the call sites so no inbound path can
+// forget it. Slack's event loop is serial (channel.go eventLoop), so the
+// already-live check needs no claim.
 func (c *Channel) postPlaceholder(ctx context.Context, channelID, localKey, threadTS string) {
+	if !c.shouldPostPlaceholder() {
+		return
+	}
+	if _, live := c.placeholders.Load(localKey); live {
+		// Only one ts is remembered per key, so a second post would orphan a
+		// "Thinking..." message in the thread forever. Rapid messages inside
+		// debounceDelay arrive with one already live.
+		return
+	}
+
 	opts := []slackapi.MsgOption{slackapi.MsgOptionText("Thinking...", false)}
 	if threadTS != "" {
 		opts = append(opts, slackapi.MsgOptionTS(threadTS))

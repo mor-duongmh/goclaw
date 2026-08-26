@@ -36,6 +36,17 @@ func isTransientFailureMessage(errStr string) bool {
 
 // FormatAgentError converts internal error to user-friendly message.
 // Issue 958: Send user-friendly error on RunFailed instead of silent "...".
+// GenericFailureNotice is what a channel says when a run failed and the
+// technical error text was suppressed for being user-facing
+// (cmd/gateway_errors.go). Without it a failed run can leave nothing at all
+// behind — no answer, no error — which is worse than a vague notice.
+//
+// English-only, like FormatAgentError below: Channel.Send has no locale in
+// scope (OutboundMessage carries none and the dispatch context is
+// process-wide), so localizing this needs the locale plumbed through outbound
+// delivery first.
+const GenericFailureNotice = "⚠️ Something went wrong. Please try again."
+
 func FormatAgentError(errStr string) string {
 	if errStr == "" {
 		return ""

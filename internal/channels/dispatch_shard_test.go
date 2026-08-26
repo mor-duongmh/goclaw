@@ -22,8 +22,9 @@ type recorderChannel struct {
 
 	// blockOn holds Send hostage for messages whose ChatID matches, until
 	// release is closed. Empty means never block.
-	blockOn string
-	release chan struct{}
+	blockOn   string
+	release   chan struct{}
+	blockedIn int // how many Sends have entered the hostage wait
 }
 
 func newRecorderChannel(name string) *recorderChannel {
@@ -40,6 +41,9 @@ func (r *recorderChannel) IsAllowed(_ string) bool       { return true }
 
 func (r *recorderChannel) Send(_ context.Context, msg bus.OutboundMessage) error {
 	if r.blockOn != "" && msg.ChatID == r.blockOn {
+		r.mu.Lock()
+		r.blockedIn++
+		r.mu.Unlock()
 		<-r.release
 	}
 	r.mu.Lock()
@@ -56,6 +60,23 @@ func (r *recorderChannel) contentsFor(chatID string) []string {
 		if m.ChatID == chatID {
 			out = append(out, m.Content)
 		}
+	}
+	return out
+}
+
+// blocked reports whether at least one Send is parked in the hostage wait.
+func (r *recorderChannel) blocked() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.blockedIn > 0
+}
+
+func (r *recorderChannel) allContents() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]string, 0, len(r.received))
+	for _, m := range r.received {
+		out = append(out, m.Content)
 	}
 	return out
 }

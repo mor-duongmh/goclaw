@@ -127,3 +127,51 @@ func TestReasoningBubblesStripMarkersInMultiBubblePayload(t *testing.T) {
 		t.Fatalf("expected the payload to span multiple bubbles, got %d", seen)
 	}
 }
+
+// The buffer is drained by the agent-event path and by the 900ms flush timer.
+// Publishing after releasing the lock let the timer's later chunk reach the bus
+// first, scrambling the reasoning. Ordering is structural now — the publish
+// happens under rc.mu — so this exercises both drain paths concurrently and
+// checks the reassembled text, rather than trying to win a race.
+func TestReasoningBubblesStayInOrderAcrossDrainPaths(t *testing.T) {
+	mgr, mb := bubbleRunForSanitize(t)
+
+	var want strings.Builder
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range 400 {
+			chunk := strings.Repeat(string(rune('a'+i%26)), 30)
+			mgr.HandleAgentEvent(protocol.ChatEventThinking, "run-1", map[string]string{"content": chunk})
+		}
+	}()
+	for i := range 400 {
+		want.WriteString(strings.Repeat(string(rune('a'+i%26)), 30))
+	}
+	<-done
+	mgr.HandleAgentEvent(protocol.AgentEventRunCompleted, "run-1", nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var got strings.Builder
+	for {
+		msg, ok := mb.SubscribeOutbound(ctx)
+		if !ok {
+			break
+		}
+		body := msg.Content
+		for _, prefix := range []string{"_Reasoning:_\n", "_Reasoning continued:_\n"} {
+			body = strings.TrimPrefix(body, prefix)
+		}
+		body = strings.TrimSuffix(body, "\n\n_Reasoning truncated._")
+		got.WriteString(body)
+	}
+
+	if got.Len() == 0 {
+		t.Fatal("no reasoning was published")
+	}
+	if !strings.HasPrefix(want.String(), got.String()) {
+		t.Fatalf("published reasoning is not an in-order prefix of the input\n got %d runes: %.80q…",
+			got.Len(), got.String())
+	}
+}

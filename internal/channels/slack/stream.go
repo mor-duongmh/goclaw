@@ -48,6 +48,12 @@ func (s *slackStream) Update(ctx context.Context, fullText string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// No placeholder to edit: CreateStream builds this shape when the run posted
+	// none, and chat.update needs a ts. Reachable whenever streaming is on and
+	// the placeholder is off — always_bubbles forces exactly that.
+	if s.msgTS == "" {
+		return
+	}
 	if s.failures >= streamMaxFailures {
 		return
 	}

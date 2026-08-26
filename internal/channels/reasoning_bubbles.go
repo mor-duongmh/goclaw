@@ -106,8 +106,14 @@ func (m *Manager) appendReasoningBubble(runID string, rc *RunContext, content st
 			m.flushReasoningBubbles(runID)
 		})
 	}
-	rc.mu.Unlock()
+	// Publish while still holding the lock. The buffer is drained by two
+	// goroutines — the agent-event path and the flush timer — and each leaves
+	// with a correctly ordered slice, but nothing ordered the two publishes:
+	// releasing the lock first let the timer's later chunk reach the bus ahead
+	// of this one. TryPublishOutbound is a non-blocking channel send and never
+	// re-enters the run, so holding rc.mu across it is safe.
 	m.publishReasoningBubbles(rc, messages)
+	rc.mu.Unlock()
 }
 
 func (m *Manager) appendReasoningBubbleFromThinkTagChunk(runID string, rc *RunContext, content string) {
@@ -177,8 +183,10 @@ func (m *Manager) flushReasoningBubblesForContext(rc *RunContext) {
 	if rc.reasoningBubbles != nil {
 		messages = rc.reasoningBubbles.flush()
 	}
-	rc.mu.Unlock()
+	// Same reason as appendReasoningBubble: the publish belongs inside the lock
+	// so the two drain paths cannot interleave their output.
 	m.publishReasoningBubbles(rc, messages)
+	rc.mu.Unlock()
 }
 
 func stopReasoningBubbleTimerLocked(rc *RunContext) {
@@ -193,6 +201,7 @@ func (m *Manager) publishReasoningBubbles(rc *RunContext, messages []string) {
 		msg := bus.OutboundMessage{
 			Channel:  rc.ChannelName,
 			ChatID:   rc.ChatID,
+			ShardKey: rc.DispatchChatID,
 			Content:  content,
 			Metadata: copyRoutingMeta(rc.Metadata),
 			TenantID: rc.TenantID,

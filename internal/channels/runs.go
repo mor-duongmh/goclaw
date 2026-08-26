@@ -17,17 +17,23 @@ func (m *Manager) RegisterRun(runID, channelName, chatID, messageID string, meta
 // RegisterRunWithBehavior associates a run ID with channel context and
 // resolved delivery behavior so event handlers do not read mutable config mid-run.
 func (m *Manager) RegisterRunWithBehavior(runID, channelName, chatID, messageID string, metadata map[string]string, tenantID uuid.UUID, streaming, blockReply, toolStatus bool, chatBehavior ResolvedChatBehavior, reasoningDelivery ...ResolvedReasoningDelivery) {
-	m.RegisterRunWithDelivery(runID, channelName, chatID, messageID, metadata, tenantID, streaming, blockReply, toolStatus, chatBehavior, DeliveryRuntime{}, reasoningDelivery...)
+	// Channels that never split the run key from the answer key dispatch on the
+	// run ChatID, exactly as before.
+	m.RegisterRunWithDelivery(runID, channelName, chatID, chatID, messageID, metadata, tenantID, streaming, blockReply, toolStatus, chatBehavior, DeliveryRuntime{}, reasoningDelivery...)
 }
 
-func (m *Manager) RegisterRunWithDelivery(runID, channelName, chatID, messageID string, metadata map[string]string, tenantID uuid.UUID, streaming, blockReply, toolStatus bool, chatBehavior ResolvedChatBehavior, deliveryRuntime DeliveryRuntime, reasoningDelivery ...ResolvedReasoningDelivery) {
+func (m *Manager) RegisterRunWithDelivery(runID, channelName, chatID, dispatchChatID, messageID string, metadata map[string]string, tenantID uuid.UUID, streaming, blockReply, toolStatus bool, chatBehavior ResolvedChatBehavior, deliveryRuntime DeliveryRuntime, reasoningDelivery ...ResolvedReasoningDelivery) {
 	delivery := ResolveReasoningDelivery("", nil)
 	if len(reasoningDelivery) > 0 {
 		delivery = reasoningDelivery[0]
 	}
+	if dispatchChatID == "" {
+		dispatchChatID = chatID
+	}
 	m.runs.Store(runID, &RunContext{
 		ChannelName:       channelName,
 		ChatID:            chatID,
+		DispatchChatID:    dispatchChatID,
 		MessageID:         messageID,
 		Metadata:          metadata,
 		TenantID:          tenantID,

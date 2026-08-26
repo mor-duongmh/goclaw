@@ -124,7 +124,7 @@ func TestHandleAgentEvent_GeneratedProgressCancelsFallback(t *testing.T) {
 	mb := bus.New()
 	mgr := NewManager(mb)
 	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
-	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", map[string]string{"local_key": "chat-1/topic"}, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "chat-1", "msg-1", map[string]string{"local_key": "chat-1/topic"}, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
 		ProgressGenerator: fakeDeliveryGenerator{content: "Mình đang kiểm tra tiếp."},
 	})
 
@@ -203,7 +203,7 @@ func TestHandleAgentEvent_GeneratedQuickAckUsesSidecarGenerator(t *testing.T) {
 	mb := bus.New()
 	mgr := NewManager(mb)
 	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
-	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
 		QuickAckGenerator: fakeDeliveryGenerator{content: "Mình nhận rồi, để mình xử lý."},
 		Inbound:           "kiểm tra giúp tôi",
 		Locale:            "vi",
@@ -238,7 +238,7 @@ func TestHandleAgentEvent_GeneratedQuickAckReceivesPersonaBrief(t *testing.T) {
 	mb := bus.New()
 	mgr := NewManager(mb)
 	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
-	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
 		QuickAckGenerator: captureDeliveryGenerator{content: "Mình nhận rồi.", requests: requests},
 		Inbound:           "kiểm tra giúp tôi",
 		Locale:            "vi",
@@ -282,7 +282,7 @@ func TestHandleAgentEvent_GeneratedQuickAckDoesNotUseTemplateWhenGeneratorFails(
 	mb := bus.New()
 	mgr := NewManager(mb)
 	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
-	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
 		QuickAckGenerator: fakeDeliveryGenerator{err: errors.New("sidecar timeout")},
 		Inbound:           "kiểm tra giúp tôi",
 		Locale:            "vi",
@@ -314,7 +314,7 @@ func TestHandleAgentEvent_IntermediateProgressDoesNotUseFallbackWhenGeneratorFai
 	mb := bus.New()
 	mgr := NewManager(mb)
 	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
-	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", map[string]string{"local_key": "chat-1/topic"}, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "chat-1", "msg-1", map[string]string{"local_key": "chat-1/topic"}, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
 		ProgressGenerator: fakeDeliveryGenerator{err: errors.New("sidecar timeout")},
 		Inbound:           "kiểm tra giúp tôi",
 		Locale:            "vi",
@@ -346,7 +346,7 @@ func TestHandleAgentEvent_IntermediateProgressReceivesPersonaBrief(t *testing.T)
 	mb := bus.New()
 	mgr := NewManager(mb)
 	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
-	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
 		ProgressGenerator: captureDeliveryGenerator{content: "Đang soi tiếp.", requests: requests},
 		Inbound:           "kiểm tra giúp tôi",
 		Locale:            "vi",
@@ -544,7 +544,7 @@ func TestHandleAgentEvent_FixedQuickAckIgnoresPersonaBrief(t *testing.T) {
 	mb := bus.New()
 	mgr := NewManager(mb)
 	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
-	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
 		QuickAckGenerator: captureDeliveryGenerator{content: "Generated.", requests: requests},
 		PersonaBrief:      "Style: concise, warm",
 	})

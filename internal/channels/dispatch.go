@@ -72,6 +72,17 @@ func outboundShardIndex(channel, chatID string, shards int) int {
 	return int(h.Sum32() % uint32(shards))
 }
 
+// dispatchShardKey resolves the key a message is sharded on. Messages belonging
+// to one run can be addressed by different ChatIDs (composite local key for
+// intermediates, bare chat id for the answer), so the run pins them together
+// with ShardKey to keep them on one worker and therefore in order.
+func dispatchShardKey(msg bus.OutboundMessage) string {
+	if msg.ShardKey != "" {
+		return msg.ShardKey
+	}
+	return msg.ChatID
+}
+
 // dispatchOutbound consumes outbound messages from the bus and fans them out to
 // per-conversation shard workers. Internal channels are silently skipped.
 func (m *Manager) dispatchOutbound(ctx context.Context) {
@@ -115,7 +126,7 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 			continue
 		}
 
-		idx := outboundShardIndex(msg.Channel, msg.ChatID, shards)
+		idx := outboundShardIndex(msg.Channel, dispatchShardKey(msg), shards)
 		select {
 		case queues[idx] <- msg:
 		case <-ctx.Done():

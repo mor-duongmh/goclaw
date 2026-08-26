@@ -282,6 +282,7 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 				m.bus.PublishOutbound(bus.OutboundMessage{
 					Channel:  rc.ChannelName,
 					ChatID:   rc.ChatID,
+					ShardKey: rc.DispatchChatID,
 					Content:  friendlyMsg,
 					TenantID: rc.TenantID,
 				})
@@ -380,6 +381,7 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		m.bus.PublishOutbound(bus.OutboundMessage{
 			Channel:  rc.ChannelName,
 			ChatID:   rc.ChatID,
+			ShardKey: rc.DispatchChatID,
 			Content:  content,
 			Metadata: outMeta,
 			TenantID: rc.TenantID,
@@ -395,6 +397,7 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		m.bus.PublishOutbound(bus.OutboundMessage{
 			Channel:  rc.ChannelName,
 			ChatID:   rc.ChatID,
+			ShardKey: rc.DispatchChatID,
 			Content:  retryMsg,
 			TenantID: rc.TenantID,
 			Metadata: map[string]string{
@@ -546,6 +549,7 @@ func (m *Manager) sendQuickAck(rc *RunContext) {
 	m.bus.PublishOutbound(bus.OutboundMessage{
 		Channel:  rc.ChannelName,
 		ChatID:   rc.ChatID,
+		ShardKey: rc.DispatchChatID,
 		Content:  content,
 		Metadata: copyRoutingMeta(rc.Metadata),
 		TenantID: rc.TenantID,
@@ -597,6 +601,7 @@ func (m *Manager) sendIntermediateProgress(rc *RunContext, toolName string) {
 	m.bus.PublishOutbound(bus.OutboundMessage{
 		Channel:  rc.ChannelName,
 		ChatID:   rc.ChatID,
+		ShardKey: rc.DispatchChatID,
 		Content:  content,
 		Metadata: copyRoutingMeta(rc.Metadata),
 		TenantID: rc.TenantID,

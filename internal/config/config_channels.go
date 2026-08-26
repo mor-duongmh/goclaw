@@ -183,6 +183,7 @@ type SlackConfig struct {
 	ThreadTTL         *int                `json:"thread_ttl,omitempty"`         // hours before thread participation expires (default 24, 0=disabled — always require @mention)
 	MediaMaxBytes     int64               `json:"media_max_bytes,omitempty"`    // max file download size in bytes (default 20MB)
 	ReasoningDelivery string              `json:"reasoning_delivery,omitempty"` // "off" (default), "streaming_only", "always_bubbles" — unset or unrecognized means off
+	ShowPlaceholder   *bool               `json:"show_placeholder,omitempty"`   // post the "Thinking..." message a reply edits in place (default true; forced off by always_bubbles)
 }
 
 type WhatsAppConfig struct {

@@ -36,6 +36,10 @@ type Channel struct {
 	botUserID string // populated on Start() via auth.test
 	teamID    string // populated on Start() via auth.test
 
+	// showPlaceholder is the resolved config value (default true). Read
+	// shouldPostPlaceholder() instead — always_bubbles overrides it.
+	showPlaceholder bool
+
 	placeholders   sync.Map // localKey -> placeholderTS
 	dedup          sync.Map // channel+ts -> time.Time
 	threadParticip sync.Map // channelID+threadTS -> time.Time (auto-reply without @mention)
@@ -97,6 +101,11 @@ func New(cfg config.SlackConfig, msgBus *bus.MessageBus, pairingSvc store.Pairin
 		requireMention = *cfg.RequireMention
 	}
 
+	showPlaceholder := true
+	if cfg.ShowPlaceholder != nil {
+		showPlaceholder = *cfg.ShowPlaceholder
+	}
+
 	historyLimit := cfg.HistoryLimit
 	if historyLimit == 0 {
 		historyLimit = channels.DefaultGroupHistoryLimit
@@ -120,12 +129,13 @@ func New(cfg config.SlackConfig, msgBus *bus.MessageBus, pairingSvc store.Pairin
 	}
 
 	ch := &Channel{
-		BaseChannel:    base,
-		config:         cfg,
-		debounceDelay:  debounceDelay,
-		threadTTL:      threadTTL,
-		debounceTimers: make(map[string]*debounceEntry),
-		userCache:      make(map[string]cachedUser),
+		BaseChannel:     base,
+		config:          cfg,
+		showPlaceholder: showPlaceholder,
+		debounceDelay:   debounceDelay,
+		threadTTL:       threadTTL,
+		debounceTimers:  make(map[string]*debounceEntry),
+		userCache:       make(map[string]cachedUser),
 	}
 	ch.SetRequireMention(requireMention)
 	ch.SetPairingService(pairingSvc)
