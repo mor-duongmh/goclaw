@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	slackapi "github.com/slack-go/slack"
-
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
@@ -17,7 +15,7 @@ const streamThrottleInterval = 1000 * time.Millisecond
 // slackStream implements channels.ChannelStream for Slack.
 // It edits the placeholder "Thinking..." message as chunks arrive.
 type slackStream struct {
-	api        *slackapi.Client
+	ch         *Channel // owner; supplies the API client and the render flag
 	channelID  string
 	threadTS   string
 	msgTS      string    // placeholder message timestamp
@@ -34,7 +32,13 @@ func (s *slackStream) Update(_ context.Context, fullText string) {
 		return
 	}
 
-	formatted := truncateForStream(markdownToSlackMrkdwn(fullText), maxMessageLen)
+	// Convert before truncating, and only on the mrkdwn path: with
+	// markdown_native on, Slack renders the raw markdown itself.
+	formatted := fullText
+	if !s.ch.markdownNativeEnabled() {
+		formatted = markdownToSlackMrkdwn(formatted)
+	}
+	formatted = truncateForStream(formatted, maxMessageLen)
 
 	// Stamp the attempt BEFORE checking the result. The throttle limits how
 	// often we call Slack, so it has to count every attempt — stamping only on
@@ -42,8 +46,14 @@ func (s *slackStream) Update(_ context.Context, fullText string) {
 	// every stream tick fired another request.
 	s.lastUpdate = time.Now()
 
-	opts := []slackapi.MsgOption{slackapi.MsgOptionText(formatted, false)}
-	if _, _, _, err := s.api.UpdateMessage(s.channelID, s.msgTS, opts...); err != nil {
+	// Through sendRendered so a format rejection on this chat.update degrades to
+	// mrkdwn instead of leaving the stream frozen for the rest of the turn.
+	err := s.ch.sendRendered(renderTarget{
+		method:    methodUpdate,
+		channelID: s.channelID,
+		msgTS:     s.msgTS,
+	}, formatted)
+	if err != nil {
 		slog.Debug("slack stream chunk update failed", "error", err)
 	}
 }
@@ -113,14 +123,14 @@ func (c *Channel) CreateStream(_ context.Context, chatID string, _ bool) (channe
 	if !pOK {
 		// No placeholder — stream will be a no-op
 		return &slackStream{
-			api:       c.api,
+			ch:        c,
 			channelID: extractChannelID(chatID),
 			threadTS:  extractThreadTS(chatID),
 		}, nil
 	}
 
 	return &slackStream{
-		api:       c.api,
+		ch:        c,
 		channelID: extractChannelID(chatID),
 		threadTS:  extractThreadTS(chatID),
 		msgTS:     pTS.(string),

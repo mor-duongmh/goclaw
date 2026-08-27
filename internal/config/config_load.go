@@ -282,6 +282,11 @@ func (c *Config) applyEnvOverrides() {
 	}
 	// Webhook internal streaming toggle (default true; nil → on via webhooks.ResolveStream).
 	envBoolPtr("GOCLAW_WEBHOOK_STREAM", &c.Gateway.WebhookStream)
+	// Operational breaker for the Slack markdown render path (nil = off). Only
+	// reaches config-file deployments: DB-backed instances carry the flag in
+	// their config JSONB, because registerConfigChannels skips the file path
+	// entirely once an instance loader exists.
+	envBoolPtr("GOCLAW_SLACK_MARKDOWN_NATIVE", &c.Channels.Slack.MarkdownNative)
 	envBoolPtr("GOCLAW_SKILLS_SLASH_COMMANDS_ENABLED", &c.Skills.SlashCommands.Enabled)
 	envBoolPtr("GOCLAW_SKILLS_SLASH_COMMANDS_SUGGEST_NOT_FOUND", &c.Skills.SlashCommands.SuggestNotFound)
 	envBool("GOCLAW_SKILLS_SLASH_COMMANDS_PARTIAL_MATCHING", &c.Skills.SlashCommands.PartialMatching)

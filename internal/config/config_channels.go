@@ -182,6 +182,10 @@ type SlackConfig struct {
 	DebounceDelay  *int                `json:"debounce_delay,omitempty"`  // ms delay before dispatching rapid messages (default 300, 0=disabled)
 	ThreadTTL      *int                `json:"thread_ttl,omitempty"`      // hours before thread participation expires (default 24, 0=disabled — always require @mention)
 	MediaMaxBytes  int64               `json:"media_max_bytes,omitempty"` // max file download size in bytes (default 20MB)
+	// MarkdownNative renders outbound text as a Block Kit markdown block instead
+	// of converting it to legacy mrkdwn. nil or false = off (the shipped default);
+	// unverified against a live workspace, so operators enable it per instance.
+	MarkdownNative *bool `json:"markdown_native,omitempty"`
 }
 
 type WhatsAppConfig struct {

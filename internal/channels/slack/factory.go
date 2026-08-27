@@ -32,6 +32,7 @@ type slackInstanceConfig struct {
 	ChatBehavior   *config.ChatBehaviorConfig `json:"chat_behavior,omitempty"`
 	DebounceDelay  *int                       `json:"debounce_delay,omitempty"`
 	ThreadTTL      *int                       `json:"thread_ttl,omitempty"`
+	MarkdownNative *bool                      `json:"markdown_native,omitempty"` // nil = off: render markdown as mrkdwn
 }
 
 // Factory creates a Slack channel from DB instance data.
@@ -76,6 +77,7 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 		ChatBehavior:   ic.ChatBehavior,
 		DebounceDelay:  ic.DebounceDelay,
 		ThreadTTL:      ic.ThreadTTL,
+		MarkdownNative: ic.MarkdownNative,
 	}
 
 	// Secure default: DB instances default to "pairing" for groups.
@@ -134,6 +136,7 @@ func FactoryWithPendingStore(pendingStore store.PendingMessageStore) channels.Ch
 			ChatBehavior:   ic.ChatBehavior,
 			DebounceDelay:  ic.DebounceDelay,
 			ThreadTTL:      ic.ThreadTTL,
+			MarkdownNative: ic.MarkdownNative,
 		}
 
 		if slackCfg.GroupPolicy == "" {

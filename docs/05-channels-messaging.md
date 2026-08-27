@@ -263,12 +263,12 @@ flowchart TD
 | DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes | Yes |
 | Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes | Yes |
 | Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- | -- |
-| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | WhatsApp native limit | 2,000 chars | 2,000 chars | 4,096 chars |
+| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 bytes | WhatsApp native limit | 2,000 chars | 2,000 chars | 4,096 chars |
 | Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | No | No | No | No |
 | Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents | Images (5 MB) | -- | Files (20 MB default) |
 | Speech-to-text | Yes (STT proxy) | -- | -- | -- | -- | -- | -- | -- |
 | Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- | -- | -- |
-| Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Plain text | Plain text | Plain text | Plain text |
+| Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn (default) / native markdown block (`markdown_native`) | Plain text | Plain text | Plain text | Plain text |
 | Bot commands | 10+ commands | -- | -- | -- | -- | -- | -- | -- |
 | Tool allow list | Per-topic | -- | -- | -- | -- | -- | -- | -- |
 | Pairing support | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
@@ -611,7 +611,7 @@ The Slack channel uses the `slack-go/slack` library to connect via Socket Mode (
 - **Socket Mode**: Uses `xapp-` App-Level Token for WebSocket connection (no public URL needed)
 - **Three token types**: `xoxb-` (Bot Token, required), `xapp-` (App-Level Token, required), `xoxp-` (User Token, optional for custom identity)
 - **Token prefix validation**: Tokens validated at startup (`xoxb-`, `xapp-`, `xoxp-` prefixes)
-- **Message limit**: 4,000-character limit with automatic splitting at newline boundaries
+- **Message limit**: 4,000 **bytes** (not characters) with automatic splitting at paragraph > line > space boundaries. Vietnamese diacritics are 2-3 bytes each and CJK is 3, so the usable character count is well below 4,000 for non-ASCII answers. The limit is unchanged by `markdown_native`: Slack's markdown block allows 12,000 characters per payload, but it may expand content before counting (a 6-byte emoji glyph becomes a 21-character shortcode), so the safe headroom cannot be derived without measuring against a live workspace
 - **Placeholder editing**: Sends "Thinking..." → edits with actual response (same as Discord)
 - **Mention gating**: `requireMention` default true; `<@botUserID>` stripped from content
 - **Thread participation cache**: After bot replies in a thread, subsequent messages in that thread auto-trigger response without @mention (24h TTL)
@@ -625,20 +625,93 @@ The Slack channel uses the `slack-go/slack` library to connect via Socket Mode (
 
 ### Formatting Pipeline
 
+Two paths, selected by the `markdown_native` flag. The mrkdwn path is the default.
+
+**`markdown_native` off (default)** — `chat.postMessage`'s `text` field only understands legacy mrkdwn:
+
 ```
 LLM markdown → htmlTagsToMarkdown() → extractSlackTokens() → escapeHTMLEntities()
 → extractCodeBlocks() → convertTablesToCodeBlocks() → bold/strike/header/link conversion
-→ restore tokens/code blocks → Slack mrkdwn
+→ restore tokens/code blocks → Slack mrkdwn → chunk at 4,000 bytes → text field
 ```
 
 Key conversions: `**bold**` → `*bold*`, `~~strike~~` → `~strike~`, `[text](url)` → `<url|text>`, `# Header` → `*Header*`, tables → code blocks.
 
+**`markdown_native` on** — Slack does the translating, so the markdown is left alone:
+
+```
+LLM markdown → structure budget split → chunk at 4,000 bytes
+→ Block Kit markdown block (raw markdown) + top-level text (plain-text fallback)
+```
+
+The two dialects disagree on the most common characters — `*one star*` is bold in mrkdwn and italic in standard
+markdown — so no single string is correct for both, which is why this is a switch rather than a merge. On the
+native path `escapeHTMLEntities()` and `extractSlackTokens()` are skipped: the markdown block documents backslash
+escaping rather than HTML entities, so escaping would put a literal `&lt;` on screen.
+
+The top-level `text` is a stripped copy of the same content, not a second rendering. It is what mobile push
+notifications and screen readers read — Slack documents that push only uses `message.text` — which is why the
+`markdown_text` field is not used at all: it conflicts with `text` and would cost the push notification.
+
+The structure budget splits content that carries many dividers, tables, headings or code fences into several
+messages, because one markdown block can expand into several blocks after Slack translates it and a message
+holds at most 50. It splits, it never truncates.
+
+### `markdown_native` Flag
+
+**Default: off.** Turning it on makes Slack render standard markdown instead of converted mrkdwn: tables arrive as
+real tables instead of code blocks, code containing `<`, `>` and `&` shows those characters instead of HTML
+entities, headings keep their levels, and task lists and blockquotes work. Editing through blocks also drops the
+"(edited)" marker that streaming updates currently leave behind.
+
+Enable per instance:
+
+```jsonc
+// config JSON5
+{ "channels": { "slack": { "markdown_native": true } } }
+```
+
+```bash
+# env, config-file deployments only
+GOCLAW_SLACK_MARKDOWN_NATIVE=true
+```
+
+```json
+// DB-backed instances: config JSONB on the channel_instances row
+{ "markdown_native": true }
+```
+
+Turning it off again is a config change, not a redeploy: set `false` or drop the key. The flag is deliberately
+absent from the web UI — it is a temporary operational breaker, not a product setting.
+
+**Not verified against a live Slack workspace.** The behaviors above come from Slack's reference documentation,
+not from measurement, which is why the default is off. Before enabling it broadly, enable it on one instance and
+check, in this order: multi-line answers keep their line breaks; mentions render as names; code keeps its special
+characters; tables render as tables; mobile push notifications still carry content; and no
+`slack.render_downgrade` warnings appear in the logs. A failure on the first item affects every answer — turn the
+flag back off.
+
+**Degrade behavior**: if Slack rejects a payload for a formatting reason (`invalid_blocks`, `msg_blocks_too_long`,
+`block_mismatch`, `markdown_text_conflict`) the message is sent again as mrkdwn, exactly once, and
+`slog.Warn("slack.render_downgrade")` records it. Users still get their answer; the render is just the old one.
+Recurring downgrades mean the flag is costing an extra API round trip without delivering anything — turn it off.
+Non-format errors (`channel_not_found`, rate limits, HTTP 5xx) are not retried, so a Slack outage cannot turn
+into a permanent downgrade.
+
+**Known limits on the native path** (not bugs):
+
+- Markdown images degrade to hyperlinks; Slack's markdown block does not render images.
+- The 4,000-byte send limit is unchanged — see **Message limit** above for why it was not raised.
+- Slack does not name the markdown specification it implements, so behavior for single newlines, nested lists and
+  raw HTML is unverified.
+
 ### Environment Variables
 
 ```
-GOCLAW_SLACK_BOT_TOKEN   → channels.slack.bot_token
-GOCLAW_SLACK_APP_TOKEN   → channels.slack.app_token
-GOCLAW_SLACK_USER_TOKEN  → channels.slack.user_token (optional)
+GOCLAW_SLACK_BOT_TOKEN          → channels.slack.bot_token
+GOCLAW_SLACK_APP_TOKEN          → channels.slack.app_token
+GOCLAW_SLACK_USER_TOKEN         → channels.slack.user_token (optional)
+GOCLAW_SLACK_MARKDOWN_NATIVE    → channels.slack.markdown_native (optional, default off)
 ```
 
 Auto-enables when both bot_token and app_token are set.

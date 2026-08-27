@@ -13,10 +13,10 @@ import (
 // Characterization fixtures for the streaming path (stream.go) plus a guard on
 // reasoning delivery. Like send_wire_test.go these pin CURRENT behavior.
 
-// newWireStream wires a slackStream to the harness channel's API client.
+// newWireStream wires a slackStream to the harness channel.
 func newWireStream(ch *Channel, channelID, msgTS string) *slackStream {
 	return &slackStream{
-		api:       ch.api,
+		ch:        ch,
 		channelID: channelID,
 		msgTS:     msgTS,
 	}
@@ -211,5 +211,83 @@ func TestSplitAtLimitIsRuneSafe(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// --- markdown_native ON branch -------------------------------------------
+
+func TestSlackWireNativeStreamUpdateSendsMarkdownBlock(t *testing.T) {
+	ch, ws := newWireTestChannel(t, nil)
+	enableMarkdownNative(ch)
+	s := newWireStream(ch, "C123", "1700.9")
+
+	s.Update(context.Background(), "**đậm** và [link](https://example.com)")
+
+	form := firstForm(t, ws, "chat.update", 0)
+	blocks := blocksOf(t, form.Get("blocks"))
+	if len(blocks) != 1 {
+		t.Fatalf("blocks has %d elements, want 1", len(blocks))
+	}
+
+	blockText, _ := blocks[0]["text"].(string)
+	if blockText != "**đậm** và [link](https://example.com)" {
+		t.Errorf("block text = %q, want the raw markdown unchanged", blockText)
+	}
+	if form.Get("text") == "" {
+		t.Error("no top-level text fallback on the streaming edit")
+	}
+	if got := form.Get("ts"); got != "1700.9" {
+		t.Errorf("ts = %q, want 1700.9", got)
+	}
+}
+
+// TestSlackWireNativeStreamDegrades covers the second chat.update path. The
+// retry happens inside one Update() call, so the throttle is not involved.
+func TestSlackWireNativeStreamDegrades(t *testing.T) {
+	ch, ws := newWireTestChannel(t, func(method string, n int) string {
+		if method == "chat.update" && n == 1 {
+			return errResponse("block_mismatch")
+		}
+		return ""
+	})
+	enableMarkdownNative(ch)
+	s := newWireStream(ch, "C123", "1700.9")
+
+	s.Update(context.Background(), "**đậm**")
+
+	updates := requireCallCount(t, ws, "chat.update", 2)
+	retry := updates[1].Form
+	if got := retry.Get("text"); got != "*đậm*" {
+		t.Errorf("degraded text = %q, want %q", got, "*đậm*")
+	}
+	if got := retry.Get("blocks"); got != "[]" {
+		t.Errorf("degraded update blocks = %q, want %q", got, "[]")
+	}
+}
+
+// TestSlackWireNativeStreamTruncationIsRuneSafe repeats the Phase 3 property on
+// the ON path, where the text put on the wire is raw markdown instead of mrkdwn.
+func TestSlackWireNativeStreamTruncationIsRuneSafe(t *testing.T) {
+	for pad := range 3 {
+		ch, ws := newWireTestChannel(t, nil)
+		enableMarkdownNative(ch)
+		s := newWireStream(ch, "C123", "1700.9")
+
+		body := strings.Repeat("a", maxMessageLen-1-pad) + "ế" + strings.Repeat("b", 64)
+		s.Update(context.Background(), body)
+
+		calls := ws.callsTo("chat.update")
+		if len(calls) == 0 {
+			t.Fatalf("pad=%d: no chat.update captured", pad)
+		}
+
+		blocks := blocksOf(t, calls[len(calls)-1].Form.Get("blocks"))
+		blockText, _ := blocks[0]["text"].(string)
+		if !utf8.ValidString(blockText) {
+			t.Errorf("pad=%d: block text is not valid UTF-8", pad)
+		}
+		if !strings.HasSuffix(blockText, "...") {
+			t.Errorf("pad=%d: truncated block text lost the \"...\" marker", pad)
+		}
 	}
 }

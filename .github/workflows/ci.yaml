@@ -53,6 +53,9 @@ jobs:
       - run: go build ./...
       - run: go build -tags sqliteonly ./...
       - run: go vet ./...
+      # Build-tagged files are invisible to the plain vet above. The Slack live
+      # probe is diagnostic-only, but it must still compile.
+      - run: go vet -tags slackprobe ./internal/channels/slack/
       # -timeout=5m caps each test binary so a deadlocked test fails fast
       # instead of blocking CI for the 10-minute default. Bumped from 90s
       # because real 1s retry backoffs in HTTPHandler and goja memory-bomb

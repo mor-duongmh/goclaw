@@ -576,3 +576,40 @@ func TestLoad_CronJobTimeout_EnvOverridesFile(t *testing.T) {
 		t.Fatalf("env should override file: got %v, want 30m", got)
 	}
 }
+
+// TestLoad_SlackMarkdownNativeFromFileAndEnv covers the operational breaker for
+// the Slack markdown render path. nil must stay distinct from false: nil means
+// "never configured" and false means "an operator turned it off", and both must
+// leave the legacy mrkdwn path in place.
+func TestLoad_SlackMarkdownNativeFromFileAndEnv(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+	os.WriteFile(cfgPath, []byte(`{"channels":{"slack":{"enabled":true}}}`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if cfg.Channels.Slack.MarkdownNative != nil {
+		t.Fatalf("unset markdown_native: got %v, want nil", *cfg.Channels.Slack.MarkdownNative)
+	}
+
+	t.Setenv("GOCLAW_SLACK_MARKDOWN_NATIVE", "true")
+	cfg, err = Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load with env error: %v", err)
+	}
+	if cfg.Channels.Slack.MarkdownNative == nil || !*cfg.Channels.Slack.MarkdownNative {
+		t.Fatalf("env markdown_native: got %v, want true", cfg.Channels.Slack.MarkdownNative)
+	}
+
+	// The breaker has to work in both directions without a redeploy.
+	t.Setenv("GOCLAW_SLACK_MARKDOWN_NATIVE", "false")
+	cfg, err = Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load with env=false error: %v", err)
+	}
+	if cfg.Channels.Slack.MarkdownNative == nil || *cfg.Channels.Slack.MarkdownNative {
+		t.Fatalf("env markdown_native=false: got %v, want false", cfg.Channels.Slack.MarkdownNative)
+	}
+}

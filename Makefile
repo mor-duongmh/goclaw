@@ -130,6 +130,9 @@ test-hooks: test-hooks-unit test-hooks-e2e test-hooks-chaos test-hooks-rbac test
 
 vet:
 	go vet ./...
+	# Build-tagged files are invisible to the plain vet above, so they rot
+	# silently. The Slack live probe is the only one we carry.
+	go vet -tags slackprobe ./internal/channels/slack/
 
 check-web:
 	cd ui/web && pnpm install --frozen-lockfile && pnpm build
