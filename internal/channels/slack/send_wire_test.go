@@ -2,6 +2,7 @@ package slack
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -393,8 +394,8 @@ func TestSlackWireNativeStructuralBudgetSplitsPosts(t *testing.T) {
 			t.Fatalf("post %d has %d blocks, want 1", i, len(blocks))
 		}
 		text, _ := blocks[0]["text"].(string)
-		if n := countStructuralLines(text); n > slackStructureBudget {
-			t.Errorf("post %d carries %d structural lines, want <= %d", i, n, slackStructureBudget)
+		if n := structuralUnits(text); n > slackStructureBudget {
+			t.Errorf("post %d carries %d structural units, want <= %d", i, n, slackStructureBudget)
 		}
 		rejoined = append(rejoined, text)
 	}
@@ -514,5 +515,51 @@ func TestSlackWireNativeMediaStillUploads(t *testing.T) {
 	if len(posts) != 2 {
 		t.Fatalf("chat.postMessage calls = %d, want 2 (failure notice + content); flow: %v",
 			len(posts), ws.methods())
+	}
+}
+
+// TestSlackWirePlaceholderUpdateIdenticalUnderBothFlags makes the D3 guard
+// falsifiable. Asserting "no blocks" on the ON path alone would also pass if
+// enableMarkdownNative were a no-op; comparing the two payloads field by field
+// cannot.
+func TestSlackWirePlaceholderUpdateIdenticalUnderBothFlags(t *testing.T) {
+	send := func(t *testing.T, native bool) url.Values {
+		t.Helper()
+		ch, ws := newWireTestChannel(t, nil)
+		if native {
+			enableMarkdownNative(ch)
+		}
+		ch.placeholders.Store("C123", "1700.9")
+
+		err := ch.Send(context.Background(), bus.OutboundMessage{
+			ChatID:  "C123",
+			Content: "Provider busy, retrying... (1/3) **not converted**",
+			Metadata: map[string]string{
+				"placeholder_key":    "C123",
+				"placeholder_update": "true",
+			},
+		})
+		if err != nil {
+			t.Fatalf("Send() error = %v", err)
+		}
+		return firstForm(t, ws, "chat.update", 0)
+	}
+
+	off, on := send(t, false), send(t, true)
+
+	if len(off) != len(on) {
+		t.Fatalf("field count differs: off=%d on=%d (%v vs %v)", len(off), len(on), off, on)
+	}
+	for field, want := range off {
+		got := on[field]
+		if len(got) != len(want) {
+			t.Errorf("field %q: off has %d values, on has %d", field, len(want), len(got))
+			continue
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("field %q[%d]:\n off: %q\n  on: %q", field, i, want[i], got[i])
+			}
+		}
 	}
 }

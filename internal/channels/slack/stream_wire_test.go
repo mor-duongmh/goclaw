@@ -291,3 +291,33 @@ func TestSlackWireNativeStreamTruncationIsRuneSafe(t *testing.T) {
 		}
 	}
 }
+
+// TestSlackWireNativeStreamOverBudgetSendsMrkdwn covers the one place the
+// structure budget cannot split: a streaming edit is a single message. Left
+// alone, an over-budget payload is rejected and degraded on EVERY tick — two
+// chat.update calls per second plus a warning each, for the whole turn, which
+// is exactly the traffic the 1s throttle exists to bound.
+func TestSlackWireNativeStreamOverBudgetSendsMrkdwn(t *testing.T) {
+	ch, ws := newWireTestChannel(t, nil)
+	enableMarkdownNative(ch)
+	s := newWireStream(ch, "C123", "1700.9")
+
+	// Over budget in units, comfortably under the byte limit.
+	body := strings.Repeat("---\nđoạn văn\n", slackStructureBudget+5)
+	if structuralUnits(body) <= slackStructureBudget {
+		t.Fatalf("fixture is not over budget: %d units", structuralUnits(body))
+	}
+
+	s.Update(context.Background(), body)
+
+	// One call, not a rejection plus a degrade.
+	form := firstForm(t, ws, "chat.update", 0)
+	requireCallCount(t, ws, "chat.update", 1)
+
+	if got := form.Get("blocks"); got != "[]" {
+		t.Errorf("blocks = %q, want %q — an over-budget tick must clear any block from an earlier tick", got, "[]")
+	}
+	if form.Get("text") == "" {
+		t.Error("over-budget tick sent no text")
+	}
+}

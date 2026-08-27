@@ -90,6 +90,34 @@ func TestPlainTextFallbackStripsMarkdown(t *testing.T) {
 			want: "| File | Dòng |\n| send.go | 57 |",
 		},
 		{
+			// Emphasis needs flanking rules. Without them the underscore rule
+			// eats everything between two identifiers, which for a dev-facing
+			// agent is the common case, not an edge case.
+			name: "snake_case identifiers survive",
+			in:   "set user_id and tenant_id now",
+			want: "set user_id and tenant_id now",
+		},
+		{
+			name: "single snake_case token survives",
+			in:   "file_name_here.go",
+			want: "file_name_here.go",
+		},
+		{
+			name: "literal asterisks survive",
+			in:   "cost is 2 * 3 * 4 dollars",
+			want: "cost is 2 * 3 * 4 dollars",
+		},
+		{
+			name: "markdown inside a code span is left alone",
+			in:   "`see [x](http://y)` end",
+			want: "see [x](http://y) end",
+		},
+		{
+			name: "emphasis around a code span still strips",
+			in:   "**đậm** và `mã`",
+			want: "đậm và mã",
+		},
+		{
 			name:    "slack mention token is left alone",
 			in:      "chào <@U0123>",
 			want:    "chào <@U0123>",
@@ -399,12 +427,15 @@ func TestSlackRenderKeepsThreadTS(t *testing.T) {
 // --- structural budget ---------------------------------------------------
 
 func TestSplitByStructureBudgetKeepsContentIntact(t *testing.T) {
+	// Counts are in structural UNITS: a whole table is one, a whole fenced
+	// block is one. Each body below is over the budget in units, so each must
+	// split.
 	bodies := map[string]string{
 		"dividers":    strings.Repeat("---\nđoạn văn\n", 60),
-		"table":       "| a | b |\n|---|---|\n" + strings.Repeat("| x | y |\n", 60),
+		"tables":      strings.Repeat("| a | b |\n|---|---|\n| x | y |\n\n", 60),
 		"headings":    strings.Repeat("## tiêu đề\nnội dung\n", 60),
-		"code fences": strings.Repeat("```go\nfmt.Println()\n```\nvăn bản\n", 30),
-		"mixed":       strings.Repeat("## h\n---\n| a | b |\n", 30),
+		"code fences": strings.Repeat("```go\nfmt.Println()\n```\nvăn bản\n", 60),
+		"mixed":       strings.Repeat("## h\n---\n| a | b |\n\n", 30),
 	}
 
 	for name, body := range bodies {
@@ -418,8 +449,10 @@ func TestSplitByStructureBudgetKeepsContentIntact(t *testing.T) {
 				t.Errorf("rejoined payloads differ from the input (len %d vs %d)", len(got), len(body))
 			}
 			for i, p := range parts {
-				if n := countStructuralLines(p); n > slackStructureBudget {
-					t.Errorf("payload %d has %d structural lines, want <= %d", i, n, slackStructureBudget)
+				// Assert against the counter the splitter itself uses, so the
+				// assertion cannot pass while the invariant is violated.
+				if n := structuralUnits(p); n > slackStructureBudget {
+					t.Errorf("payload %d has %d structural units, want <= %d", i, n, slackStructureBudget)
 				}
 			}
 		})
@@ -458,6 +491,50 @@ func TestSplitByStructureBudgetNeverCutsInsideAFence(t *testing.T) {
 				i, n, p)
 		}
 	}
+}
+
+// TestSplitByStructureBudgetKeepsTablesWhole covers the failure a
+// content-preservation check cannot see: a split between two table rows leaves
+// a header with no delimiter row in one payload and a delimiter with no header
+// in the next. Neither half is a table any more, so Slack renders both as
+// literal pipes — losing exactly the rendering this migration exists to gain.
+func TestSplitByStructureBudgetKeepsTablesWhole(t *testing.T) {
+	t.Run("table after a full budget of dividers", func(t *testing.T) {
+		body := strings.Repeat("---\nvăn bản\n", slackStructureBudget-1) +
+			"| h1 | h2 |\n|----|----|\n| a | b |\n| c | d |"
+
+		holders := 0
+		for _, p := range splitByStructureBudget(body) {
+			if !strings.Contains(p, "| h1 | h2 |") {
+				continue
+			}
+			holders++
+			for _, want := range []string{"|----|----|", "| a | b |", "| c | d |"} {
+				if !strings.Contains(p, want) {
+					t.Errorf("payload holding the header lost %q:\n%s", want, p)
+				}
+			}
+		}
+		if holders != 1 {
+			t.Errorf("table header appears in %d payloads, want 1", holders)
+		}
+	})
+
+	t.Run("long table is one unit", func(t *testing.T) {
+		// A table translates to one table block, not one per row, so 60 rows
+		// must not trip a 40-block budget.
+		body := "| h | i |\n|---|---|\n" + strings.Repeat("| r | s |\n", 60)
+		if parts := splitByStructureBudget(body); len(parts) != 1 {
+			t.Errorf("60-row table split into %d payloads, want 1", len(parts))
+		}
+	})
+
+	t.Run("fenced block is one unit", func(t *testing.T) {
+		body := "```go\n" + strings.Repeat("fmt.Println()\n", 60) + "```"
+		if parts := splitByStructureBudget(body); len(parts) != 1 {
+			t.Errorf("one fenced block split into %d payloads, want 1", len(parts))
+		}
+	})
 }
 
 func TestSplitByStructureBudgetShortContentIsOnePayload(t *testing.T) {

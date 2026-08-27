@@ -46,14 +46,32 @@ func (s *slackStream) Update(_ context.Context, fullText string) {
 	// every stream tick fired another request.
 	s.lastUpdate = time.Now()
 
-	// Through sendRendered so a format rejection on this chat.update degrades to
-	// mrkdwn instead of leaving the stream frozen for the rest of the turn.
-	err := s.ch.sendRendered(renderTarget{
+	target := renderTarget{
 		method:    methodUpdate,
 		channelID: s.channelID,
 		msgTS:     s.msgTS,
-	}, formatted)
-	if err != nil {
+	}
+
+	// A streaming edit is one message, so the structure budget has no split to
+	// fall back on here. Send mrkdwn for this tick instead of letting Slack
+	// reject the payload: a rejection degrades, and since the content only
+	// grows, every following tick would rejected-then-degrade too — two
+	// chat.update calls per second for the rest of the turn, which is the
+	// traffic the throttle exists to bound. Sending blocks: [] as part of the
+	// mrkdwn payload also clears a block left by an earlier, smaller tick.
+	if s.ch.markdownNativeEnabled() && structuralUnits(formatted) > slackStructureBudget {
+		slog.Debug("slack stream payload over block budget, sending mrkdwn",
+			"channel_id", s.channelID, "units", structuralUnits(formatted))
+
+		if err := s.ch.dispatch(target, degradedOptions(target, formatted)); err != nil {
+			slog.Debug("slack stream chunk update failed", "error", err)
+		}
+		return
+	}
+
+	// Through sendRendered so a format rejection on this chat.update degrades to
+	// mrkdwn instead of leaving the stream frozen for the rest of the turn.
+	if err := s.ch.sendRendered(target, formatted); err != nil {
 		slog.Debug("slack stream chunk update failed", "error", err)
 	}
 }

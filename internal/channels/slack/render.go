@@ -105,11 +105,13 @@ func degradedOptions(t renderTarget, text string) []slackapi.MsgOption {
 	opts := []slackapi.MsgOption{slackapi.MsgOptionText(markdownToSlackMrkdwn(text), false)}
 
 	if t.method == methodUpdate {
-		// chat.update keeps the existing blocks unless the request carries a
-		// blocks value, and MsgOptionBlocks() with no arguments is a no-op (nil
-		// guard in slack-go). Passing a non-nil empty slice is the only way to
-		// send blocks: [] and actually drop the rejected markdown block —
-		// otherwise block_mismatch repeats on every edit, silently.
+		// Slack removes the existing blocks when an update carries text and no
+		// blocks, so the text alone would already drop the rejected block.
+		// Send blocks: [] anyway — it states the intent at the call site and
+		// keeps the retry correct if that behavior ever narrows.
+		//
+		// It has to be a non-nil empty slice: MsgOptionBlocks() with no
+		// arguments hits slack-go's nil guard and silently does nothing.
 		empty := []slackapi.Block{}
 		opts = append(opts, slackapi.MsgOptionBlocks(empty...))
 	}
@@ -147,7 +149,10 @@ func (c *Channel) sendRendered(t renderTarget, text string) error {
 // dispatch performs the actual API call for a target.
 func (c *Channel) dispatch(t renderTarget, opts []slackapi.MsgOption) error {
 	if t.threadTS != "" {
-		opts = append(opts, slackapi.MsgOptionTS(t.threadTS))
+		// Copy instead of appending in place: opts belongs to the caller, and a
+		// slice with spare capacity would have its backing array written.
+		opts = append(append(make([]slackapi.MsgOption, 0, len(opts)+1), opts...),
+			slackapi.MsgOptionTS(t.threadTS))
 	}
 
 	if t.method == methodUpdate {
@@ -187,19 +192,33 @@ func isFormatError(err error) bool {
 	return formatErrorCodes[se.Err]
 }
 
+// Line classifiers for the structural scan. Matched per line, so no (?m).
 var (
-	reFenceLine  = regexp.MustCompile("^\\s*```")
-	reImageLink  = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
-	reInlineCode = regexp.MustCompile("`([^`\n]+)`")
-	reItalicStar = regexp.MustCompile(`\*([^*\n]+)\*`)
-	reItalicUnd  = regexp.MustCompile(`_([^_\n]+)_`)
+	reFenceLine   = regexp.MustCompile("^[ \t]*```")
+	reTableLine   = regexp.MustCompile(`^[ \t]*\|`)
+	reDividerLine = regexp.MustCompile(`^[ \t]*-{3,}[ \t]*$`)
+	reHeadingLine = regexp.MustCompile(`^[ \t]*#{1,6}[ \t]`)
+)
+
+// Inline and block markers stripped for the notification text.
+var (
+	reImageLink = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
+
+	// Emphasis needs flanking rules. Without them the underscore rule swallows
+	// everything between two snake_case identifiers ("set user_id and
+	// tenant_id" became "set userid and tenantid") and the star rule eats
+	// literal asterisks in arithmetic ("2 * 3 * 4" became "2  3  4"). Both are
+	// ordinary content for a developer-facing agent.
+	//
+	// The rules here: the opening marker must not sit inside a word, and the
+	// emphasized text must not be space-flanked. RE2 has no lookaround, so the
+	// preceding character is captured and written back.
+	reItalicStar = regexp.MustCompile(`(^|[^\w])\*([^*\s\n](?:[^*\n]*[^*\s\n])?)\*`)
+	reItalicUnd  = regexp.MustCompile(`(^|[^\w])_([^_\s\n](?:[^_\n]*[^_\s\n])?)_`)
+
 	reListMarker = regexp.MustCompile(`(?m)^[ \t]*[-*+][ \t]+`)
 	reQuoteMark  = regexp.MustCompile(`(?m)^[ \t]*>[ \t]?`)
 	reBlankRun   = regexp.MustCompile(`\n{3,}`)
-
-	// Structural lines are the ones Slack is likely to expand into their own
-	// block: dividers, table rows, fences and headings.
-	reStructuralLine = regexp.MustCompile("(?m)^(?:---|\\||```|#{1,6}\\s)")
 )
 
 // plainTextFallback strips markdown down to something readable in a push
@@ -228,14 +247,12 @@ func plainTextFallback(text string) string {
 	}
 	out := strings.Join(kept, "\n")
 
-	out = reImageLink.ReplaceAllString(out, "$1") // before links: ![alt](url)
-	out = reLink.ReplaceAllString(out, "$1")      // [text](url) -> text
-	out = reInlineCode.ReplaceAllString(out, "$1")
-	out = reBoldDouble.ReplaceAllString(out, "$1")     // before single-star italic
-	out = reBoldUnderscore.ReplaceAllString(out, "$1") // before single-underscore italic
-	out = reStrike.ReplaceAllString(out, "$1")
-	out = reItalicStar.ReplaceAllString(out, "$1")
-	out = reItalicUnd.ReplaceAllString(out, "$1")
+	// Inline markers are stripped only outside code spans: a link written
+	// inside `backticks` is literal text, and rewriting it would report code
+	// the sender never wrote.
+	out = outsideCodeSpans(out, stripInlineMarkers)
+
+	// Block markers are line-anchored, so they run on the whole text.
 	out = reHeader.ReplaceAllString(out, "$1")
 	out = reListMarker.ReplaceAllString(out, "")
 	out = reQuoteMark.ReplaceAllString(out, "")
@@ -244,6 +261,43 @@ func plainTextFallback(text string) string {
 	out = strings.TrimSpace(out)
 
 	return cutRunes(out, plainTextFallbackRunes)
+}
+
+// stripInlineMarkers removes inline markdown syntax from a run of prose.
+func stripInlineMarkers(text string) string {
+	text = reImageLink.ReplaceAllString(text, "$1")      // before links: ![alt](url)
+	text = reLink.ReplaceAllString(text, "$1")           // [text](url) -> text
+	text = reBoldDouble.ReplaceAllString(text, "$1")     // before single-star italic
+	text = reBoldUnderscore.ReplaceAllString(text, "$1") // before single-underscore italic
+	text = reStrike.ReplaceAllString(text, "$1")
+	text = reItalicStar.ReplaceAllString(text, "${1}${2}")
+	text = reItalicUnd.ReplaceAllString(text, "${1}${2}")
+	return text
+}
+
+// outsideCodeSpans applies fn to the segments of text that sit outside a
+// `code span`, dropping the backticks either way.
+//
+// Splitting on backticks instead of masking spans with a sentinel is
+// deliberate: D13 kept placeholder tokens off this path, and a sentinel that
+// survives into the payload is exactly the failure mode that ruled them out.
+func outsideCodeSpans(text string, fn func(string) string) string {
+	if !strings.Contains(text, "`") {
+		return fn(text)
+	}
+
+	parts := strings.Split(text, "`")
+	var sb strings.Builder
+	for i, part := range parts {
+		// Odd indexes sit between a pair of backticks. An unpaired trailing
+		// backtick leaves its segment last, and that segment is prose again.
+		if i%2 == 1 && i < len(parts)-1 {
+			sb.WriteString(part)
+			continue
+		}
+		sb.WriteString(fn(part))
+	}
+	return sb.String()
 }
 
 // cutRunes trims to a rune count, marking the cut. Counting runes rather than
@@ -257,10 +311,53 @@ func cutRunes(text string, limit int) string {
 	return string(runes[:limit]) + "..."
 }
 
-// countStructuralLines counts the lines Slack is likely to turn into their own
-// block.
-func countStructuralLines(text string) int {
-	return len(reStructuralLine.FindAllStringIndex(text, -1))
+// structuralUnits counts the elements Slack is likely to translate into their
+// own block.
+//
+// A unit is not a line. A whole table becomes one table block and a whole
+// fenced block becomes one code block, so counting their rows would overstate
+// a table by a factor of its length — and, worse, would invite a split between
+// two rows. Dividers and headings are one unit each.
+func structuralUnits(text string) int {
+	n := 0
+	sc := structureScanner{}
+	for _, line := range strings.Split(text, "\n") {
+		if sc.startsUnit(line) {
+			n++
+		}
+	}
+	return n
+}
+
+// structureScanner walks lines in order and reports where a new structural unit
+// begins. The fence and table state it carries is what makes a split point safe.
+type structureScanner struct {
+	inFence bool
+	inTable bool
+}
+
+func (s *structureScanner) startsUnit(line string) bool {
+	switch {
+	case reFenceLine.MatchString(line):
+		// Only the opening fence begins a unit; the closing one ends it.
+		starts := !s.inFence
+		s.inFence = !s.inFence
+		s.inTable = false
+		return starts
+
+	case s.inFence:
+		// Body of a code block. Table-looking lines in here are just code.
+		return false
+
+	case reTableLine.MatchString(line):
+		starts := !s.inTable
+		s.inTable = true
+		return starts
+
+	default:
+		s.inTable = false
+		return reDividerLine.MatchString(line) || reHeadingLine.MatchString(line)
+	}
 }
 
 // splitByStructureBudget breaks text into payloads that each stay under the
@@ -270,31 +367,30 @@ func countStructuralLines(text string) int {
 // several messages rather than being cut off. Joining the results with "\n"
 // reproduces the input exactly.
 //
-// Splits only land on line boundaries outside a fenced code block; cutting
-// between ``` and its closing fence would leave both halves unbalanced.
+// A split may only land where a new structural unit begins, which by
+// construction is never inside a fenced block and never partway through a
+// table. Cutting a table between two rows leaves a header with no delimiter row
+// in one payload and a delimiter with no header in the next: neither half is a
+// table any more, so Slack renders both as literal pipes — losing exactly the
+// rendering this path exists to gain.
 func splitByStructureBudget(text string) []string {
 	lines := strings.Split(text, "\n")
 
 	var payloads []string
 	var cur []string
 	count := 0
-	inFence := false
+	sc := structureScanner{}
 
 	for _, line := range lines {
-		isFence := reFenceLine.MatchString(line)
-		structural := isFence || reStructuralLine.MatchString(line)
+		startsUnit := sc.startsUnit(line)
 
-		if structural && count >= slackStructureBudget && !inFence && len(cur) > 0 {
+		if startsUnit && count >= slackStructureBudget && len(cur) > 0 {
 			payloads = append(payloads, strings.Join(cur, "\n"))
 			cur = nil
 			count = 0
 		}
-
-		if structural {
+		if startsUnit {
 			count++
-		}
-		if isFence {
-			inFence = !inFence
 		}
 		cur = append(cur, line)
 	}

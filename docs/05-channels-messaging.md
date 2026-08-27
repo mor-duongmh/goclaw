@@ -653,16 +653,20 @@ The top-level `text` is a stripped copy of the same content, not a second render
 notifications and screen readers read — Slack documents that push only uses `message.text` — which is why the
 `markdown_text` field is not used at all: it conflicts with `text` and would cost the push notification.
 
-The structure budget splits content that carries many dividers, tables, headings or code fences into several
-messages, because one markdown block can expand into several blocks after Slack translates it and a message
-holds at most 50. It splits, it never truncates.
+The structure budget splits content carrying many dividers, tables, headings or code fences into several
+messages, because one markdown block can expand into several blocks after Slack translates it and a message holds
+at most 50. It counts whole elements, not lines — a table is one unit however many rows it has — and it never
+splits inside a table or a code fence, because half a table is no longer a table. It splits, it never truncates.
+
+Streaming edits cannot be split, since they are a single message being rewritten. When a streaming payload goes
+over the budget the channel sends mrkdwn for that tick instead of waiting for Slack to reject it, which would
+otherwise cost two API calls per tick for the rest of the turn.
 
 ### `markdown_native` Flag
 
 **Default: off.** Turning it on makes Slack render standard markdown instead of converted mrkdwn: tables arrive as
 real tables instead of code blocks, code containing `<`, `>` and `&` shows those characters instead of HTML
-entities, headings keep their levels, and task lists and blockquotes work. Editing through blocks also drops the
-"(edited)" marker that streaming updates currently leave behind.
+entities, headings keep their levels, and task lists and blockquotes work.
 
 Enable per instance:
 
