@@ -3,6 +3,7 @@ package channels
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // TestChunkMarkdown_EmptyText tests that empty text returns nil
@@ -533,5 +534,86 @@ func TestChunkMarkdown_EmptyLines(t *testing.T) {
 	// Should preserve structure
 	if !strings.Contains(fullText, "text") || !strings.Contains(fullText, "more text") {
 		t.Fatal("content was lost with multiple empty lines")
+	}
+}
+
+// TestChunkMarkdown_UTF8Safety is the property that a Slack limit change is
+// most likely to break: no chunk may ever be invalid UTF-8.
+//
+// Two measured limitations bound the sweep, both documented in plan.md rather
+// than fixed here, because every production limit is >= 2000:
+//
+//  1. maxLen 3 with a 4-byte rune (emoji): the rune-boundary walk-back at
+//     chunking.go:45-47 reaches 0 and the `if cutAt == 0 { cutAt = maxLen }`
+//     guard at chunking.go:48-49 re-cuts mid-rune, emitting "\xf0\x9f\x98".
+//  2. maxLen < 8 with fenced content: ChunkMarkdown HANGS. The 4-byte repair
+//     fence it injects on a forced split inside a fence eats the whole budget,
+//     so the loop stops making progress.
+func TestChunkMarkdown_UTF8Safety(t *testing.T) {
+	// Corpora stay small: the sweep below is the point, not bulk. A 4-byte rune
+	// (emoji) is present in most of them because that is the case the
+	// rune-boundary walk-back is most likely to get wrong.
+	corpora := map[string]string{
+		"vietnamese": strings.Repeat("Cửa hàng đã nhận đủ đơn hàng — ệ ỗ ự ỹ ằ ắ. ", 6),
+		"cjk":        strings.Repeat("你好世界 これはテストです 한국어 ", 6),
+		"emoji":      strings.Repeat("😀🎉🚀👍 ", 12),
+		"mixed":      strings.Repeat("Xin chào 中文 😀 `code` **đậm** ", 8),
+		"fenced":     "```go\n" + strings.Repeat("// nhận xét tiếng Việt có dấu 😀\n", 6) + "```",
+	}
+
+	// Sweep starts at 8, not 4. Below 8 ChunkMarkdown does not merely misbehave
+	// on fenced content — it HANGS. The repair fence "\n```" it injects on a
+	// forced split inside a fence is 4 bytes, so once maxLen is small enough the
+	// injected fence consumes the whole budget and the loop stops making
+	// progress. Measured: any fenced corpus hangs at maxLen 4 and completes from
+	// maxLen 8 upward. Every production limit is >= 2000; see plan.md
+	// "Ngoài phạm vi" for the logged limitation.
+	lens := []int{}
+	for n := 8; n <= 64; n++ {
+		lens = append(lens, n)
+	}
+	for n := 70; n <= 300; n += 10 {
+		lens = append(lens, n)
+	}
+	lens = append(lens, 2000, 4000, 11000)
+
+	for name, corpus := range corpora {
+		t.Run(name, func(t *testing.T) {
+			for _, maxLen := range lens {
+				for i, chunk := range ChunkMarkdown(corpus, maxLen) {
+					if !utf8.ValidString(chunk) {
+						t.Fatalf("maxLen=%d chunk[%d] is not valid UTF-8: %q", maxLen, i, chunk)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestChunkMarkdown_PreservesAllWordsWithoutFences guards the other half of
+// chunking: no word may be dropped or fused across a split.
+//
+// Chunks are joined with a SPACE, not with "". ChunkMarkdown splits at a
+// separator and consumes it — chunk N ends "…中文" and chunk N+1 begins "😀…" —
+// which is correct, since each chunk becomes its own message and leading
+// whitespace there is noise. Joining with "" would fuse the two words and make
+// this test report a defect that does not exist.
+//
+// Fenced content is excluded: ChunkMarkdown deliberately injects repair fences,
+// so that path is not word-preserving by design.
+func TestChunkMarkdown_PreservesAllWordsWithoutFences(t *testing.T) {
+	corpus := strings.Repeat("Cửa hàng đã nhận đủ đơn hàng 中文 😀. ", 12)
+
+	for _, maxLen := range []int{50, 137, 512, 2000} {
+		chunks := ChunkMarkdown(corpus, maxLen)
+		joined := strings.Join(chunks, " ")
+
+		normWords := func(s string) string {
+			return strings.Join(strings.Fields(s), " ")
+		}
+		got, want := normWords(joined), normWords(corpus)
+		if got != want {
+			t.Fatalf("maxLen=%d: words lost or fused across a split\n got len=%d\nwant len=%d", maxLen, len(got), len(want))
+		}
 	}
 }

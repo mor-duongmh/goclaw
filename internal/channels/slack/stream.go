@@ -34,19 +34,48 @@ func (s *slackStream) Update(_ context.Context, fullText string) {
 		return
 	}
 
-	formatted := markdownToSlackMrkdwn(fullText)
-	if len(formatted) > maxMessageLen {
-		formatted = formatted[:maxMessageLen] + "..."
-	}
+	formatted := truncateForStream(markdownToSlackMrkdwn(fullText), maxMessageLen)
+
+	// Stamp the attempt BEFORE checking the result. The throttle limits how
+	// often we call Slack, so it has to count every attempt — stamping only on
+	// success meant a persistently failing update never advanced the clock and
+	// every stream tick fired another request.
+	s.lastUpdate = time.Now()
 
 	opts := []slackapi.MsgOption{slackapi.MsgOptionText(formatted, false)}
-	_, _, _, err := s.api.UpdateMessage(s.channelID, s.msgTS, opts...)
-	if err != nil {
+	if _, _, _, err := s.api.UpdateMessage(s.channelID, s.msgTS, opts...); err != nil {
 		slog.Debug("slack stream chunk update failed", "error", err)
-		return
+	}
+}
+
+// truncateForStream cuts text to the wire limit without splitting a UTF-8 rune,
+// appending "..." only when content was actually dropped.
+//
+// The previous implementation sliced bytes directly (text[:maxLen]), which
+// produced invalid UTF-8 whenever the limit fell inside a multi-byte character.
+// Vietnamese diacritics are 2-3 bytes each, so this was reachable on ordinary
+// content, not just exotic input.
+//
+// ChunkMarkdown already does the rune-boundary walk-back and is covered by its
+// own tests, so reuse it instead of re-implementing utf8.RuneStart here. Its
+// first chunk may exceed maxLen by a few bytes when it repairs a split code
+// fence; that headroom is harmless against Slack's own 40,000-character limit.
+func truncateForStream(text string, maxLen int) string {
+	if len(text) <= maxLen {
+		return text
 	}
 
-	s.lastUpdate = time.Now()
+	chunks := channels.ChunkMarkdown(text, maxLen)
+	switch len(chunks) {
+	case 0:
+		// Unreachable for non-empty input, but never return an empty message
+		// just because chunking surprised us.
+		return text
+	case 1:
+		return chunks[0]
+	default:
+		return chunks[0] + "..."
+	}
 }
 
 // Stop finalizes the stream. For Slack, Send() handles the final edit via the placeholder map,
