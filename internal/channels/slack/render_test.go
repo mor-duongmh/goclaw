@@ -537,6 +537,43 @@ func TestSplitByStructureBudgetKeepsTablesWhole(t *testing.T) {
 	})
 }
 
+// TestSplitByStructureBudgetHandlesNestedFences pins the CommonMark closing
+// rule. A ```` block that quotes a shorter ``` fence — what an agent writes
+// whenever it explains markdown — used to invert the scanner's fence state:
+// everything after it looked like prose, so the comment lines of the NEXT real
+// code block were counted as headings and split straight through the middle of
+// that block.
+func TestSplitByStructureBudgetHandlesNestedFences(t *testing.T) {
+	quoting := "````markdown\n# Example\n```js\nconst x = 1;\n```\n````\n"
+
+	if got := structuralUnits(quoting); got != 1 {
+		t.Errorf("a ```` block quoting an inner fence = %d units, want 1", got)
+	}
+
+	// After that block, a real code block whose comments look like headings.
+	var b strings.Builder
+	b.WriteString(quoting)
+	b.WriteString("Now the script:\n\n```bash\n")
+	for i := 0; i < 60; i++ {
+		b.WriteString(fmt.Sprintf("# step %d\nrun_step %d\n", i, i))
+	}
+	b.WriteString("```\nDone.\n")
+	body := b.String()
+
+	parts := splitByStructureBudget(body)
+	if strings.Join(parts, "\n") != body {
+		t.Error("content changed across the split")
+	}
+	for i, p := range parts {
+		if n := strings.Count(p, "```"); n%2 != 0 && !strings.Contains(p, "````") {
+			t.Errorf("payload %d has unbalanced fences — the split landed inside a code block:\n%s", i, p)
+		}
+		if strings.Contains(p, "run_step 30") && !strings.Contains(p, "```bash") {
+			t.Errorf("payload %d holds the middle of the bash block without its opening fence", i)
+		}
+	}
+}
+
 func TestSplitByStructureBudgetShortContentIsOnePayload(t *testing.T) {
 	body := "## tiêu đề\nmột dòng\n\n| a | b |\n|---|---|\n| 1 | 2 |"
 	parts := splitByStructureBudget(body)

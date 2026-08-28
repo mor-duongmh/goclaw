@@ -200,6 +200,25 @@ var (
 	reHeadingLine = regexp.MustCompile(`^[ \t]*#{1,6}[ \t]`)
 )
 
+// fenceMarker reports the length of a code-fence run at the start of line plus
+// whatever info string follows it. Fewer than three backticks is not a fence.
+//
+// CommonMark closes a fence only with a run at least as long as the opener and
+// carrying no info string, which is exactly what lets a markdown example quote
+// ``` inside a ```` block.
+func fenceMarker(line string) (backticks int, info string) {
+	trimmed := strings.TrimLeft(line, " \t")
+
+	n := 0
+	for n < len(trimmed) && trimmed[n] == '`' {
+		n++
+	}
+	if n < 3 {
+		return 0, ""
+	}
+	return n, strings.TrimSpace(trimmed[n:])
+}
+
 // Inline and block markers stripped for the notification text.
 var (
 	reImageLink = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
@@ -332,23 +351,38 @@ func structuralUnits(text string) int {
 // structureScanner walks lines in order and reports where a new structural unit
 // begins. The fence and table state it carries is what makes a split point safe.
 type structureScanner struct {
-	inFence bool
+	fence   int // backtick count of the open fence; 0 = not inside one
 	inTable bool
 }
 
 func (s *structureScanner) startsUnit(line string) bool {
-	switch {
-	case reFenceLine.MatchString(line):
-		// Only the opening fence begins a unit; the closing one ends it.
-		starts := !s.inFence
-		s.inFence = !s.inFence
-		s.inTable = false
-		return starts
+	if n, info := fenceMarker(line); n > 0 {
+		switch {
+		case s.fence == 0:
+			// Opening fence. One code block, however long.
+			s.fence = n
+			s.inTable = false
+			return true
 
-	case s.inFence:
+		case n >= s.fence && info == "":
+			// Closing fence.
+			s.fence = 0
+		}
+
+		// Anything else is content. A ````block quoting an inner ``` fence is
+		// one code block, and treating that inner line as a boundary inverts
+		// the state for the rest of the message: the real code that follows
+		// then looks like prose, and its comment lines get counted as headings
+		// and split through.
+		return false
+	}
+
+	if s.fence > 0 {
 		// Body of a code block. Table-looking lines in here are just code.
 		return false
+	}
 
+	switch {
 	case reTableLine.MatchString(line):
 		starts := !s.inTable
 		s.inTable = true
@@ -368,8 +402,8 @@ func (s *structureScanner) startsUnit(line string) bool {
 // reproduces the input exactly.
 //
 // A split may only land where a new structural unit begins, which by
-// construction is never inside a fenced block and never partway through a
-// table. Cutting a table between two rows leaves a header with no delimiter row
+// construction is never inside a fenced block — including a ```` block that
+// quotes shorter fences — and never partway through a table. Cutting a table between two rows leaves a header with no delimiter row
 // in one payload and a delimiter with no header in the next: neither half is a
 // table any more, so Slack renders both as literal pipes — losing exactly the
 // rendering this path exists to gain.
